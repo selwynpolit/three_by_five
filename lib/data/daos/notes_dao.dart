@@ -1,0 +1,16 @@
+import 'package:drift/drift.dart';
+import '../database/app_database.dart';
+
+class NotesDao {
+  NotesDao(this._db);
+  final AppDatabase _db;
+
+  Stream<List<AppNote>> watchByTask(String taskId) =>
+      (_db.select(_db.notes)
+            ..where((n) => n.taskId.equals(taskId))
+            ..orderBy([(n) => OrderingTerm.asc(n.createdAt)]))
+          .watch();
+
+  Future<void> insert(NotesCompanion entry) =>
+      _db.into(_db.notes).insert(entry);
+}

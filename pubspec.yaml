@@ -1,0 +1,82 @@
+name: three_by_five
+description: "3by5 — a beautiful index-card task manager"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Database
+  drift: ^2.22.0
+  drift_flutter: ^0.2.1
+  sqlite3_flutter_libs: ^0.5.28
+
+  # State management
+  flutter_riverpod: ^2.6.0
+  riverpod_annotation: ^2.6.0
+
+  # Navigation
+  go_router: ^14.6.0
+
+  # Rich text editor
+  flutter_quill: ^11.5.0
+
+  # IDs
+  uuid: ^4.5.0
+
+  # Date utilities
+  jiffy: ^6.3.1
+  intl: any
+
+  # Recurrence (RFC 5545 RRULE)
+  rrule: ^0.2.12
+
+  # Typography
+  google_fonts: ^6.2.1
+
+  # Window management (macOS size/position persistence)
+  window_manager: ^0.4.3
+
+  # File system
+  path_provider: ^2.1.4
+  path: ^1.9.0
+
+  # Networking (link title + favicon fetch)
+  http: ^1.2.2
+
+  # File operations
+  desktop_drop: ^0.4.4
+  file_picker: ^8.1.3
+
+  # Image processing (thumbnails)
+  image: ^4.2.0
+
+  # Animations
+  flutter_animate: ^4.5.0
+
+  # Calendar widget
+  table_calendar: ^3.1.2
+
+  # Voice input
+  speech_to_text: ^6.6.2
+
+  # Utilities
+  collection: ^1.18.0
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  build_runner: ^2.4.12
+  drift_dev: ^2.22.0
+  riverpod_generator: any
+  riverpod_lint: any
+  custom_lint: any
+
+flutter:
+  uses-material-design: true

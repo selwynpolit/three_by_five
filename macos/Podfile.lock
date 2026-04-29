@@ -1,0 +1,92 @@
+PODS:
+  - desktop_drop (0.0.1):
+    - FlutterMacOS
+  - file_picker (0.0.1):
+    - FlutterMacOS
+  - FlutterMacOS (1.0.0)
+  - quill_native_bridge_macos (0.0.1):
+    - FlutterMacOS
+  - screen_retriever_macos (0.0.1):
+    - FlutterMacOS
+  - speech_to_text_macos (0.0.1):
+    - FlutterMacOS
+  - sqlite3 (3.52.0):
+    - sqlite3/common (= 3.52.0)
+  - sqlite3/common (3.52.0)
+  - sqlite3/dbstatvtab (3.52.0):
+    - sqlite3/common
+  - sqlite3/fts5 (3.52.0):
+    - sqlite3/common
+  - sqlite3/math (3.52.0):
+    - sqlite3/common
+  - sqlite3/perf-threadsafe (3.52.0):
+    - sqlite3/common
+  - sqlite3/rtree (3.52.0):
+    - sqlite3/common
+  - sqlite3/session (3.52.0):
+    - sqlite3/common
+  - sqlite3_flutter_libs (0.0.1):
+    - Flutter
+    - FlutterMacOS
+    - sqlite3 (~> 3.52.0)
+    - sqlite3/dbstatvtab
+    - sqlite3/fts5
+    - sqlite3/math
+    - sqlite3/perf-threadsafe
+    - sqlite3/rtree
+    - sqlite3/session
+  - url_launcher_macos (0.0.1):
+    - FlutterMacOS
+  - window_manager (0.2.0):
+    - FlutterMacOS
+
+DEPENDENCIES:
+  - desktop_drop (from `Flutter/ephemeral/.symlinks/plugins/desktop_drop/macos`)
+  - file_picker (from `Flutter/ephemeral/.symlinks/plugins/file_picker/macos`)
+  - FlutterMacOS (from `Flutter/ephemeral`)
+  - quill_native_bridge_macos (from `Flutter/ephemeral/.symlinks/plugins/quill_native_bridge_macos/macos`)
+  - screen_retriever_macos (from `Flutter/ephemeral/.symlinks/plugins/screen_retriever_macos/macos`)
+  - speech_to_text_macos (from `Flutter/ephemeral/.symlinks/plugins/speech_to_text_macos/macos`)
+  - sqlite3_flutter_libs (from `Flutter/ephemeral/.symlinks/plugins/sqlite3_flutter_libs/darwin`)
+  - url_launcher_macos (from `Flutter/ephemeral/.symlinks/plugins/url_launcher_macos/macos`)
+  - window_manager (from `Flutter/ephemeral/.symlinks/plugins/window_manager/macos`)
+
+SPEC REPOS:
+  trunk:
+    - sqlite3
+
+EXTERNAL SOURCES:
+  desktop_drop:
+    :path: Flutter/ephemeral/.symlinks/plugins/desktop_drop/macos
+  file_picker:
+    :path: Flutter/ephemeral/.symlinks/plugins/file_picker/macos
+  FlutterMacOS:
+    :path: Flutter/ephemeral
+  quill_native_bridge_macos:
+    :path: Flutter/ephemeral/.symlinks/plugins/quill_native_bridge_macos/macos
+  screen_retriever_macos:
+    :path: Flutter/ephemeral/.symlinks/plugins/screen_retriever_macos/macos
+  speech_to_text_macos:
+    :path: Flutter/ephemeral/.symlinks/plugins/speech_to_text_macos/macos
+  sqlite3_flutter_libs:
+    :path: Flutter/ephemeral/.symlinks/plugins/sqlite3_flutter_libs/darwin
+  url_launcher_macos:
+    :path: Flutter/ephemeral/.symlinks/plugins/url_launcher_macos/macos
+  window_manager:
+    :path: Flutter/ephemeral/.symlinks/plugins/window_manager/macos
+
+SPEC CHECKSUMS:
+  desktop_drop: e0b672a7d84c0a6cbc378595e82cdb15f2970a43
+  file_picker: 7584aae6fa07a041af2b36a2655122d42f578c1a
+  FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
+  quill_native_bridge_macos: 2b005cb56902bb740e0cd9620aa399dfac6b4882
+  screen_retriever_macos: 452e51764a9e1cdb74b3c541238795849f21557f
+  speech_to_text_macos: cb920dff8288c218a7e8c96c8c931b17e801dae7
+  sqlite3: a51c07cf16e023d6c48abd5e5791a61a47354921
+  sqlite3_flutter_libs: b3e120efe9a82017e5552a620f696589ed4f62ab
+  url_launcher_macos: f87a979182d112f911de6820aefddaf56ee9fbfd
+  window_manager: 1d01fa7ac65a6e6f83b965471b1a7fdd3f06166c
+
+PODFILE CHECKSUM: 54d867c82ac51cbd61b565781b9fada492027009
+
+COCOAPODS: 1.16.2
