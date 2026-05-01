@@ -13,4 +13,11 @@ class NotesDao {
 
   Future<void> insert(NotesCompanion entry) =>
       _db.into(_db.notes).insert(entry);
+
+  Future<void> update(String id, String body) =>
+      (_db.update(_db.notes)..where((n) => n.id.equals(id)))
+          .write(NotesCompanion(body: Value(body)));
+
+  Future<void> delete(String id) =>
+      (_db.delete(_db.notes)..where((n) => n.id.equals(id))).go();
 }

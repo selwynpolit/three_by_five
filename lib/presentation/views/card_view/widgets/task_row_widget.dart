@@ -66,18 +66,51 @@ class _TaskRowWidgetState extends ConsumerState<TaskRowWidget>
         );
   }
 
+  Future<void> _showContextMenu(
+      BuildContext context, Offset globalPos) async {
+    final task = widget.task;
+    final result = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+          globalPos.dx, globalPos.dy, globalPos.dx + 1, globalPos.dy + 1),
+      items: [
+        const PopupMenuItem(value: 'open', child: Text('Open')),
+        const PopupMenuItem(value: 'duplicate', child: Text('Duplicate')),
+        PopupMenuItem(
+          value: task.columnName == 'now' ? 'move_later' : 'move_now',
+          child: Text(task.columnName == 'now' ? 'Move to Later' : 'Move to Now'),
+        ),
+        const PopupMenuDivider(),
+        const PopupMenuItem(value: 'delete', child: Text('Delete')),
+      ],
+    );
+    if (!context.mounted) return;
+    switch (result) {
+      case 'open':
+        ref.read(selectedTaskIdProvider.notifier).select(task.id);
+      case 'duplicate':
+        await ref.read(taskRepositoryProvider).duplicate(task.id);
+      case 'move_later':
+        await ref.read(taskRepositoryProvider).update(id: task.id, column: 'later');
+      case 'move_now':
+        await ref.read(taskRepositoryProvider).update(id: task.id, column: 'now');
+      case 'delete':
+        await ref.read(taskRepositoryProvider).delete(task.id);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final task = widget.task;
-    final tags =
-        ref.watch(tagsForTaskProvider(task.id));
+    final tags = ref.watch(tagsForTaskProvider(task.id));
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTap: () => ref
-            .read(selectedTaskIdProvider.notifier)
-            .select(task.id),
+        onTap: () =>
+            ref.read(selectedTaskIdProvider.notifier).select(task.id),
+        onSecondaryTapDown: (d) =>
+            _showContextMenu(context, d.globalPosition),
         child: _buildRow(context, task, tags),
       ),
     );

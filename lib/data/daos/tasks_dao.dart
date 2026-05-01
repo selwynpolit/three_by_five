@@ -9,7 +9,7 @@ class TasksDao {
       (_db.select(_db.tasks)
             ..where((t) => t.cardId.equals(cardId) & t.deletedAt.isNull())
             ..orderBy([
-              (t) => OrderingTerm.asc(t.sortOrder),
+              (t) => OrderingTerm.asc(t.sortOrder, nulls: NullsOrder.last),
               (t) => OrderingTerm.asc(t.createdAt),
             ]))
           .watch();
@@ -21,7 +21,7 @@ class TasksDao {
                 t.columnName.equals(column) &
                 t.deletedAt.isNull())
             ..orderBy([
-              (t) => OrderingTerm.asc(t.sortOrder),
+              (t) => OrderingTerm.asc(t.sortOrder, nulls: NullsOrder.last),
               (t) => OrderingTerm.asc(t.createdAt),
             ]))
           .watch();

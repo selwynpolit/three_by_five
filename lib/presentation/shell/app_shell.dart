@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -6,6 +7,7 @@ import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/daos/settings_dao.dart';
 import '../../domain/enums/app_view.dart';
+import '../providers/card_providers.dart';
 import '../providers/database_provider.dart';
 import '../providers/init_provider.dart';
 import '../providers/stack_providers.dart';
@@ -61,6 +63,14 @@ class _ShellReadyState extends ConsumerState<_ShellReady> {
     });
   }
 
+  Future<void> _createCard() async {
+    final stackId = ref.read(activeStackIdProvider);
+    if (stackId == null) return;
+    await ref
+        .read(cardRepositoryProvider)
+        .create(stackId: stackId, date: DateTime.now());
+  }
+
   @override
   Widget build(BuildContext context) {
     ref.listen(activeStackIdProvider, (_, next) {
@@ -76,7 +86,16 @@ class _ShellReadyState extends ConsumerState<_ShellReady> {
     final activeStackId = ref.watch(activeStackIdProvider);
     final selectedTaskId = ref.watch(selectedTaskIdProvider);
 
-    return Row(
+    return Material(
+      type: MaterialType.transparency,
+      child: CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.keyN, meta: true):
+              _createCard,
+        },
+        child: Focus(
+          autofocus: true,
+          child: Row(
       children: [
         const Sidebar(),
         Expanded(
@@ -147,6 +166,9 @@ class _ShellReadyState extends ConsumerState<_ShellReady> {
           ),
         ),
       ],
+          ),
+        ),
+      ),
     );
   }
 

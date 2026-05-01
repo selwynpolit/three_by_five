@@ -37,9 +37,9 @@ class TaskDetailPanel extends ConsumerStatefulWidget {
 
 class _TaskDetailPanelState extends ConsumerState<TaskDetailPanel> {
   final _titleController = TextEditingController();
-  final _noteController = TextEditingController();
   final _noteFocusNode = FocusNode();
   QuillController? _quillController;
+  QuillController? _noteQuillController;
   Timer? _debounce;
   bool _ready = false;
   bool _initializing = false;
@@ -50,9 +50,9 @@ class _TaskDetailPanelState extends ConsumerState<TaskDetailPanel> {
   void dispose() {
     _debounce?.cancel();
     _titleController.dispose();
-    _noteController.dispose();
     _noteFocusNode.dispose();
     _quillController?.dispose();
+    _noteQuillController?.dispose();
     super.dispose();
   }
 
@@ -64,6 +64,8 @@ class _TaskDetailPanelState extends ConsumerState<TaskDetailPanel> {
 
     _quillController = _createQuill(task.description);
     _quillController!.addListener(_scheduleDescSave);
+
+    _noteQuillController = QuillController.basic();
 
     setState(() => _ready = true);
   }
@@ -113,39 +115,48 @@ class _TaskDetailPanelState extends ConsumerState<TaskDetailPanel> {
 
   // ── Note submission ────────────────────────────────────────────────────────
 
+  void _clearNoteComposer() {
+    final old = _noteQuillController;
+    setState(() => _noteQuillController = QuillController.basic());
+    WidgetsBinding.instance.addPostFrameCallback((_) => old?.dispose());
+  }
+
   Future<void> _submitNote() async {
-    final body = _noteController.text.trim();
-    if (body.isEmpty) return;
+    final ctrl = _noteQuillController;
+    if (ctrl == null) return;
+    if (ctrl.document.length <= 1) return; // empty (only trailing newline)
+
+    final plainText = ctrl.document.toPlainText().trim();
+    if (plainText.isEmpty) return;
 
     // Detect email clip
     final emailSvc = EmailClipService();
-    if (emailSvc.looksLikeEmail(body)) {
-      final clip = emailSvc.parse(body)!;
+    if (emailSvc.looksLikeEmail(plainText)) {
+      final clip = emailSvc.parse(plainText)!;
       await ref.read(attachmentRepositoryProvider).addEmailClip(
             taskId: widget.taskId,
             subject: clip.subject,
             sender: clip.sender,
             bodySnippet: clip.bodySnippet,
           );
-      _noteController.clear();
+      _clearNoteComposer();
       return;
     }
 
-    // Check if it's a plain URL
-    final urlPattern = RegExp(
-      r'^https?://\S+$',
-      caseSensitive: false,
-    );
-    if (urlPattern.hasMatch(body)) {
-      await _addLinkAttachment(body);
-      _noteController.clear();
+    // Check if the entire content is a plain URL
+    final urlPattern = RegExp(r'^https?://\S+$', caseSensitive: false);
+    if (urlPattern.hasMatch(plainText)) {
+      await _addLinkAttachment(plainText);
+      _clearNoteComposer();
       return;
     }
 
+    final json =
+        jsonEncode(ctrl.document.toDelta().toJson());
     await ref
         .read(noteRepositoryProvider)
-        .create(taskId: widget.taskId, body: body);
-    _noteController.clear();
+        .create(taskId: widget.taskId, body: json);
+    _clearNoteComposer();
   }
 
   Future<void> _addLinkAttachment(String url) async {
@@ -346,9 +357,9 @@ class _TaskDetailPanelState extends ConsumerState<TaskDetailPanel> {
               ),
             ),
 
-            // ── Note input ─────────────────────────────────────────
-            _NoteInputBar(
-              controller: _noteController,
+            // ── Note composer ──────────────────────────────────────
+            _NoteComposer(
+              controller: _noteQuillController!,
               focusNode: _noteFocusNode,
               onSubmit: _submitNote,
             ),
@@ -454,18 +465,49 @@ class _IconBtnState extends State<_IconBtn> {
   }
 }
 
-// ── Note input bar ─────────────────────────────────────────────────────────────
+// ── Note composer (Quill-based) ────────────────────────────────────────────────
 
-class _NoteInputBar extends StatelessWidget {
-  const _NoteInputBar({
+class _NoteComposer extends StatefulWidget {
+  const _NoteComposer({
     required this.controller,
     required this.focusNode,
     required this.onSubmit,
   });
 
-  final TextEditingController controller;
+  final QuillController controller;
   final FocusNode focusNode;
   final VoidCallback onSubmit;
+
+  @override
+  State<_NoteComposer> createState() => _NoteComposerState();
+}
+
+class _NoteComposerState extends State<_NoteComposer> {
+  bool _focused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.focusNode.addListener(_onFocus);
+  }
+
+  @override
+  void didUpdateWidget(_NoteComposer old) {
+    super.didUpdateWidget(old);
+    if (old.focusNode != widget.focusNode) {
+      old.focusNode.removeListener(_onFocus);
+      widget.focusNode.addListener(_onFocus);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.focusNode.removeListener(_onFocus);
+    super.dispose();
+  }
+
+  void _onFocus() =>
+      setState(() => _focused = widget.focusNode.hasFocus);
 
   @override
   Widget build(BuildContext context) {
@@ -473,61 +515,143 @@ class _NoteInputBar extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
       decoration: const BoxDecoration(
         border: Border(
-          top: BorderSide(color: AppColors.divider, width: 0.5),
-        ),
+            top: BorderSide(color: AppColors.divider, width: 0.5)),
         color: AppColors.cardSurface,
       ),
-      child: KeyboardListener(
-        focusNode: FocusNode(),
-        onKeyEvent: (event) {
-          if (event is KeyDownEvent &&
-              event.logicalKey == LogicalKeyboardKey.enter &&
-              !HardwareKeyboard.instance.isShiftPressed) {
-            onSubmit();
-          }
+      child: CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.enter, meta: true):
+              widget.onSubmit,
         },
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Expanded(
-              child: TextField(
-                controller: controller,
-                focusNode: focusNode,
-                maxLines: 4,
-                minLines: 1,
-                style: Theme.of(context).textTheme.bodyMedium,
-                decoration: InputDecoration(
-                  hintText:
-                      'Add a note, URL or email… (Enter to send)',
-                  hintStyle:
-                      Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: AppColors.textDisabled,
-                          ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(
-                        color: AppColors.cardBorder, width: 0.5),
+            // Toolbar — animates in when editor is focused.
+            AnimatedCrossFade(
+              duration: const Duration(milliseconds: 160),
+              crossFadeState: _focused
+                  ? CrossFadeState.showFirst
+                  : CrossFadeState.showSecond,
+              firstChild: Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: QuillSimpleToolbar(
+                  controller: widget.controller,
+                  config: const QuillSimpleToolbarConfig(
+                    showDividers: false,
+                    showFontFamily: false,
+                    showFontSize: false,
+                    showBoldButton: true,
+                    showItalicButton: true,
+                    showSmallButton: false,
+                    showUnderLineButton: false,
+                    showStrikeThrough: false,
+                    showInlineCode: false,
+                    showColorButton: false,
+                    showBackgroundColorButton: false,
+                    showClearFormat: false,
+                    showAlignmentButtons: false,
+                    showLeftAlignment: false,
+                    showCenterAlignment: false,
+                    showRightAlignment: false,
+                    showJustifyAlignment: false,
+                    showHeaderStyle: false,
+                    showListNumbers: true,
+                    showListBullets: true,
+                    showListCheck: false,
+                    showCodeBlock: false,
+                    showQuote: false,
+                    showIndent: false,
+                    showLink: false,
+                    showUndo: true,
+                    showRedo: false,
+                    showDirection: false,
+                    showSearchButton: false,
+                    showSubscript: false,
+                    showSuperscript: false,
+                    multiRowsDisplay: false,
+                    toolbarSize: 28,
+                    toolbarIconAlignment: WrapAlignment.start,
                   ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(
-                        color: AppColors.cardBorder, width: 0.5),
+                ),
+              ),
+              secondChild: const SizedBox.shrink(),
+            ),
+
+            // Editor
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
+              constraints:
+                  const BoxConstraints(minHeight: 52, maxHeight: 130),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.canvas,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: _focused
+                      ? AppColors.accent
+                      : AppColors.cardBorder,
+                  width: _focused ? 1 : 0.5,
+                ),
+              ),
+              child: QuillEditor.basic(
+                controller: widget.controller,
+                focusNode: widget.focusNode,
+                config: QuillEditorConfig(
+                  placeholder: 'Add a note… (⌘↵ to save)',
+                  autoFocus: false,
+                  expands: false,
+                  scrollable: true,
+                  padding: EdgeInsets.zero,
+                  customStyles: DefaultStyles(
+                    paragraph: DefaultTextBlockStyle(
+                      AppTypography.textTheme.bodyMedium!.copyWith(
+                        color: AppColors.textPrimary,
+                        height: 1.5,
+                      ),
+                      HorizontalSpacing.zero,
+                      VerticalSpacing.zero,
+                      VerticalSpacing.zero,
+                      null,
+                    ),
+                    placeHolder: DefaultTextBlockStyle(
+                      AppTypography.textTheme.bodyMedium!.copyWith(
+                        color: AppColors.textDisabled,
+                        height: 1.5,
+                      ),
+                      HorizontalSpacing.zero,
+                      VerticalSpacing.zero,
+                      VerticalSpacing.zero,
+                      null,
+                    ),
                   ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(
-                        color: AppColors.accent, width: 1),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 8),
-                  isDense: true,
-                  filled: true,
-                  fillColor: AppColors.canvas,
                 ),
               ),
             ),
-            const SizedBox(width: 8),
-            _SendButton(onTap: onSubmit),
+
+            // Submit row — visible when focused.
+            AnimatedSize(
+              duration: const Duration(milliseconds: 160),
+              child: _focused
+                  ? Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            '⌘↵ to save',
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelMedium
+                                ?.copyWith(color: AppColors.textDisabled),
+                          ),
+                          _SaveButton(onTap: widget.onSubmit),
+                        ],
+                      ),
+                    )
+                  : const SizedBox.shrink(),
+            ),
           ],
         ),
       ),
@@ -535,15 +659,15 @@ class _NoteInputBar extends StatelessWidget {
   }
 }
 
-class _SendButton extends StatefulWidget {
-  const _SendButton({required this.onTap});
+class _SaveButton extends StatefulWidget {
+  const _SaveButton({required this.onTap});
   final VoidCallback onTap;
 
   @override
-  State<_SendButton> createState() => _SendButtonState();
+  State<_SaveButton> createState() => _SaveButtonState();
 }
 
-class _SendButtonState extends State<_SendButton> {
+class _SaveButtonState extends State<_SaveButton> {
   bool _hovered = false;
 
   @override
@@ -556,17 +680,18 @@ class _SendButtonState extends State<_SendButton> {
         onTap: widget.onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 120),
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
             color: _hovered ? AppColors.accent : AppColors.accentLight,
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(6),
           ),
-          child: Icon(
-            Icons.arrow_upward,
-            size: 16,
-            color: _hovered
-                ? AppColors.textInverse
-                : AppColors.accent,
+          child: Text(
+            'Save',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color:
+                      _hovered ? AppColors.textInverse : AppColors.accent,
+                  fontWeight: FontWeight.w600,
+                ),
           ),
         ),
       ),

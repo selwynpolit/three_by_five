@@ -103,4 +103,17 @@ class TaskRepository {
       _dao.updateKanbanStage(id, stageId);
 
   Future<void> reorder(List<String> orderedIds) => _dao.reorder(orderedIds);
+
+  Future<String> duplicate(String taskId) async {
+    final src = await getById(taskId);
+    if (src == null) return '';
+    return create(
+      cardId: src.cardId,
+      title: src.title,
+      column: src.columnName,
+      priority: src.priority,
+      description: src.description,
+      dueDate: src.dueDate,
+    );
+  }
 }
