@@ -9,12 +9,13 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../data/database/app_database.dart';
+import '../../../domain/undo/undo_action.dart';
 import '../../providers/canvas_providers.dart';
 import '../../providers/card_providers.dart';
 import '../../providers/stack_providers.dart';
 import '../../providers/task_providers.dart';
+import '../../providers/ui_state_providers.dart';
 import 'widgets/index_card_widget.dart';
-import 'widgets/task_row_widget.dart';
 
 class CardView extends ConsumerWidget {
   const CardView({super.key});
@@ -898,7 +899,7 @@ class _TaskListViewState extends ConsumerState<_TaskListView> {
                   child: ListView.separated(
                     padding: const EdgeInsets.only(bottom: 24),
                     itemCount: rows.length,
-                    separatorBuilder: (_, __) =>
+                    separatorBuilder: (_, _) =>
                         const Divider(height: 1, indent: 16, endIndent: 16),
                     itemBuilder: (ctx, i) => _GridDataRow(
                       key: ValueKey(rows[i].task.id),
@@ -1013,7 +1014,6 @@ class _GridDataRowState extends ConsumerState<_GridDataRow>
   late final Animation<double> _checkScale;
 
   static final _dateFmt = intl.DateFormat('d MMM');
-  static final _dueFmt = intl.DateFormat('d MMM');
 
   @override
   void initState() {
