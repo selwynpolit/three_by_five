@@ -13,6 +13,7 @@ import '../../../providers/canvas_providers.dart';
 import '../../../providers/card_providers.dart';
 import '../../../providers/task_providers.dart';
 import '../../../providers/ui_state_providers.dart';
+import '../../kanban_view/kanban_view.dart' show showCardKanbanDialog;
 import 'card_column_widget.dart';
 
 class IndexCardWidget extends ConsumerStatefulWidget {
@@ -70,6 +71,9 @@ class _IndexCardWidgetState extends ConsumerState<IndexCardWidget> {
           ],
           const PopupMenuDivider(),
           const PopupMenuItem(
+              value: 'kanban', child: Text('Kanban view…')),
+          const PopupMenuDivider(),
+          const PopupMenuItem(
               value: 'del_completed',
               child: Text('Delete completed tasks')),
           const PopupMenuDivider(),
@@ -95,6 +99,8 @@ class _IndexCardWidgetState extends ConsumerState<IndexCardWidget> {
         undo.record(CardHidden(cardId: card.id));
       case 'snooze':
         await _showSnoozeMenu(context, globalPos, card.id);
+      case 'kanban':
+        if (context.mounted) await showCardKanbanDialog(context, card);
       case 'del_completed':
         await ref.read(taskRepositoryProvider).deleteCompletedForCard(card.id);
       case 'archive':
@@ -176,6 +182,14 @@ class _IndexCardWidgetState extends ConsumerState<IndexCardWidget> {
     final isSelected =
         ref.watch(selectedCardIdsProvider).contains(widget.card.id);
 
+    // Show a Kanban pill when any task has been moved beyond the first column.
+    final columns = ref.watch(boardColumnsProvider).valueOrNull ?? [];
+    final firstColId = columns.isNotEmpty ? columns.first.id : null;
+    final hasKanbanTasks = tasksAsync.valueOrNull?.any(
+          (t) => t.kanbanStageId != null && t.kanbanStageId != firstColId,
+        ) ??
+        false;
+
     Color borderColor;
     double borderWidth;
     if (isSelected) {
@@ -223,6 +237,7 @@ class _IndexCardWidgetState extends ConsumerState<IndexCardWidget> {
                 stackName: widget.stackName,
                 isHiddenOrArchived: _isHiddenOrSnoozed || _isArchived,
                 isSelected: isSelected,
+                hasKanbanTasks: hasKanbanTasks,
                 onTap: () {
                   final notifier =
                       ref.read(selectedCardIdsProvider.notifier);
@@ -320,6 +335,7 @@ class _CardHeader extends StatefulWidget {
     required this.stackColor,
     required this.isHiddenOrArchived,
     required this.isSelected,
+    required this.hasKanbanTasks,
     required this.onTap,
     required this.onRightClick,
     required this.onTitleSaved,
@@ -330,6 +346,7 @@ class _CardHeader extends StatefulWidget {
   final Color stackColor;
   final bool isHiddenOrArchived;
   final bool isSelected;
+  final bool hasKanbanTasks;
   final String? stackName;
   final VoidCallback onTap;
   final void Function(Offset) onRightClick;
@@ -515,14 +532,25 @@ class _CardHeaderState extends State<_CardHeader> {
                         ],
                       ),
                     ),
-                    if (isExpanded)
-                      const Tooltip(
-                        message: 'Board',
-                        child: Icon(
-                          Icons.view_column_outlined,
-                          size: 14,
-                          color: AppColors.textTertiary,
-                        ),
+                    if (isExpanded || widget.hasKanbanTasks)
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (isExpanded)
+                            const Tooltip(
+                              message: 'Board',
+                              child: Icon(
+                                Icons.view_column_outlined,
+                                size: 14,
+                                color: AppColors.textTertiary,
+                              ),
+                            ),
+                          if (widget.hasKanbanTasks) ...[
+                            if (isExpanded) const SizedBox(height: 4),
+                            const _KanbanBadge(),
+                          ],
+                        ],
                       ),
                   ],
                 ),
@@ -613,6 +641,38 @@ class _StatusBadge extends StatelessWidget {
               letterSpacing: 0,
               fontWeight: FontWeight.w500,
             ),
+      ),
+    );
+  }
+}
+
+class _KanbanBadge extends StatelessWidget {
+  const _KanbanBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppColors.accent.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.view_week_outlined,
+              size: 9, color: AppColors.accent),
+          SizedBox(width: 3),
+          Text(
+            'Kanban',
+            style: TextStyle(
+              fontSize: 9,
+              color: AppColors.accent,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' as intl;
 
 import '../../../core/theme/app_colors.dart';
@@ -674,16 +675,16 @@ class _KanbanTaskCardState extends ConsumerState<_KanbanTaskCard> {
             ? AppColors.cardSurface.withValues(alpha: 0.6)
             : AppColors.cardSurface,
         borderRadius: BorderRadius.circular(_kCardRadius),
-        border: Border(
-          left: BorderSide(
-            color: task.priority == 'high'
-                ? AppColors.priorityHigh
-                : task.priority == 'low'
-                    ? AppColors.priorityLow
-                    : Colors.transparent,
-            width: task.priority == 'normal' ? 0 : 3,
-          ),
-        ),
+        border: task.priority == 'normal'
+            ? null
+            : Border(
+                left: BorderSide(
+                  color: task.priority == 'high'
+                      ? AppColors.priorityHigh
+                      : AppColors.priorityLow,
+                  width: 3,
+                ),
+              ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -873,4 +874,178 @@ Future<String?> _promptColumnName(BuildContext context) {
       ],
     ),
   );
+}
+
+// ── Card-level Kanban dialog ───────────────────────────────────────────────────
+
+/// Opens a kanban board scoped to a single [card]'s tasks.
+Future<void> showCardKanbanDialog(BuildContext context, AppCard card) =>
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        insetPadding: const EdgeInsets.all(32),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        clipBehavior: Clip.antiAlias,
+        child: SizedBox(
+          // 3 columns + 2 gaps + side padding
+          width: 3 * _kColWidth + 2 * _kColGap + 40,
+          height: 520,
+          child: _CardKanbanContent(card: card),
+        ),
+      ),
+    );
+
+class _CardKanbanContent extends ConsumerStatefulWidget {
+  const _CardKanbanContent({required this.card});
+  final AppCard card;
+
+  @override
+  ConsumerState<_CardKanbanContent> createState() =>
+      _CardKanbanContentState();
+}
+
+class _CardKanbanContentState extends ConsumerState<_CardKanbanContent> {
+  bool _hideCompleted = false;
+  AppTask? _dragging;
+  static final _dateFmt = intl.DateFormat('EEE d MMM');
+
+  @override
+  Widget build(BuildContext context) {
+    final columnsAsync = ref.watch(boardColumnsProvider);
+    final tasksAsync =
+        ref.watch(tasksForCardProvider(widget.card.id));
+
+    return Column(
+      children: [
+        _buildDialogHeader(context),
+        Expanded(
+          child: Container(
+            color: AppColors.appBackground,
+            child: columnsAsync.when(
+              loading: () => const Center(
+                  child: CircularProgressIndicator(strokeWidth: 2)),
+              error: (e, _) => Center(child: Text('Error: $e')),
+              data: (columns) => tasksAsync.when(
+                loading: () => const SizedBox.shrink(),
+                error: (e, _) => Center(child: Text('Error: $e')),
+                data: (tasks) => _buildBoard(columns, tasks),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDialogHeader(BuildContext context) {
+    final card = widget.card;
+    return Container(
+      height: 56,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: const BoxDecoration(
+        color: AppColors.canvas,
+        border: Border(
+          bottom: BorderSide(color: AppColors.divider, width: 0.5),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  _dateFmt.format(card.date),
+                  style: GoogleFonts.caveat(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondary,
+                    height: 1.1,
+                  ),
+                ),
+                if (card.projectTitle != null) ...[
+                  const SizedBox(height: 1),
+                  Text(
+                    card.projectTitle!,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          _ToggleChip(
+            label: 'Hide completed',
+            active: _hideCompleted,
+            onTap: () =>
+                setState(() => _hideCompleted = !_hideCompleted),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            icon: const Icon(Icons.close, size: 18),
+            color: AppColors.textTertiary,
+            tooltip: 'Close',
+            onPressed: () => Navigator.pop(context),
+            padding: const EdgeInsets.all(6),
+            constraints: const BoxConstraints(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBoard(
+      List<AppBoardColumn> columns, List<AppTask> tasks) {
+    final cardMap = <String, AppCard>{widget.card.id: widget.card};
+
+    final filtered = tasks.where((t) {
+      if (_hideCompleted && t.isCompleted) return false;
+      return true;
+    }).toList();
+
+    final validIds = columns.map((c) => c.id).toSet();
+    final Map<String, List<AppTask>> byCol = {
+      for (final col in columns) col.id: [],
+    };
+    for (final t in filtered) {
+      final bucket = (t.kanbanStageId != null &&
+              validIds.contains(t.kanbanStageId))
+          ? t.kanbanStageId!
+          : (columns.isNotEmpty ? columns.first.id : null);
+      if (bucket != null) byCol[bucket]!.add(t);
+    }
+
+    return ListView.separated(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      itemCount: columns.length,
+      separatorBuilder: (_, _) => const SizedBox(width: _kColGap),
+      itemBuilder: (context, i) {
+        final col = columns[i];
+        return _KanbanColumn(
+          key: ValueKey(col.id),
+          column: col,
+          tasks: byCol[col.id] ?? [],
+          cardMap: cardMap,
+          dragging: _dragging,
+          onDragStart: (t) => setState(() => _dragging = t),
+          onDragEnd: () => setState(() => _dragging = null),
+          onDrop: (task) => _moveTask(task, col.id),
+        );
+      },
+    );
+  }
+
+  Future<void> _moveTask(AppTask task, String colId) async {
+    if (task.kanbanStageId == colId) return;
+    await ref
+        .read(taskRepositoryProvider)
+        .updateKanbanStage(task.id, colId);
+  }
 }
