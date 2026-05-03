@@ -5,6 +5,7 @@ import '../../data/daos/notes_dao.dart';
 import '../../data/daos/tasks_dao.dart';
 import '../../data/database/app_database.dart';
 import '../../data/repositories/task_repository.dart';
+import 'card_providers.dart';
 import 'database_provider.dart';
 
 part 'task_providers.g.dart';
@@ -72,3 +73,20 @@ Stream<List<AppAttachment>> attachmentsForTask(
   String taskId,
 ) =>
     AttachmentsDao(ref.watch(appDatabaseProvider)).watchByTask(taskId);
+
+/// All non-deleted tasks across every card that is currently visible
+/// (respects the hiddenStackIds filter in cardsProvider).
+/// Used by the flat task list view.  Non-annotated to skip build_runner.
+/// Tasks for all visible cards including hidden/snoozed ones (the task list
+/// view has its own toggle to filter those out).
+final allVisibleTasksProvider =
+    StreamProvider.autoDispose<List<AppTask>>((ref) {
+  final dao = TasksDao(ref.watch(appDatabaseProvider));
+  final cardIds = ref
+          .watch(allCardsIncludingHiddenProvider)
+          .valueOrNull
+          ?.map((c) => c.id)
+          .toList() ??
+      const [];
+  return dao.watchTasksForCards(cardIds);
+});

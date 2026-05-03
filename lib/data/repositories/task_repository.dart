@@ -106,6 +106,12 @@ class TaskRepository {
 
   Future<void> reorder(List<String> orderedIds) => _dao.reorder(orderedIds);
 
+  Future<void> deleteCompletedForCard(String cardId) =>
+      _dao.deleteCompletedForCard(cardId);
+
+  Future<void> deleteCompletedForCards(List<String> cardIds) =>
+      _dao.deleteCompletedForCards(cardIds);
+
   Future<String> duplicate(String taskId) async {
     final src = await getById(taskId);
     if (src == null) return '';

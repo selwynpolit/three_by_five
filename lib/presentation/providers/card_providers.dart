@@ -42,3 +42,15 @@ Stream<List<AppCard>> archivedCards(ArchivedCardsRef ref) {
   final repo = ref.watch(cardRepositoryProvider);
   return repo.watchArchived();
 }
+
+/// All cards (including hidden/snoozed) filtered only by hiddenStackIds.
+/// Used by the task list view so it can independently toggle hidden-card rows.
+final allCardsIncludingHiddenProvider =
+    StreamProvider.autoDispose<List<AppCard>>((ref) {
+  final repo = ref.watch(cardRepositoryProvider);
+  final hiddenStackIds = ref.watch(hiddenStackIdsProvider);
+  final base = repo.watchAll(showHidden: true);
+  if (hiddenStackIds.isEmpty) return base;
+  return base.map((list) =>
+      list.where((c) => !hiddenStackIds.contains(c.stackId)).toList());
+});

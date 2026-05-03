@@ -4,7 +4,29 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'stack_providers.dart';
 
-enum CardLayoutMode { grid, scattered, canvas }
+enum CardLayoutMode { grid, scattered, canvas, taskList }
+
+/// Columns in the task list grid — also used as sort keys.
+enum TaskListColumn { task, card, cardDate, dueDate, priority, column }
+
+/// Current sort for the task list grid.
+class TaskSortConfig {
+  const TaskSortConfig(this.column, {this.ascending = true});
+  final TaskListColumn column;
+  final bool ascending;
+
+  TaskSortConfig withToggle(TaskListColumn col) => col == column
+      ? TaskSortConfig(column, ascending: !ascending)
+      : TaskSortConfig(col);
+}
+
+final taskListSortConfigProvider = StateProvider<TaskSortConfig>(
+    (ref) => const TaskSortConfig(TaskListColumn.cardDate, ascending: false));
+
+final taskListSearchProvider = StateProvider<String>((ref) => '');
+
+/// When true the task list shows tasks from hidden/snoozed cards too.
+final showHiddenInTaskListProvider = StateProvider<bool>((ref) => false);
 
 final cardLayoutModeProvider =
     StateProvider<CardLayoutMode>((ref) => CardLayoutMode.grid);

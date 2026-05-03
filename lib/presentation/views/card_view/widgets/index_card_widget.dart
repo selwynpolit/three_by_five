@@ -69,6 +69,10 @@ class _IndexCardWidgetState extends ConsumerState<IndexCardWidget> {
                 value: 'snooze', child: Text('Snooze until…')),
           ],
           const PopupMenuDivider(),
+          const PopupMenuItem(
+              value: 'del_completed',
+              child: Text('Delete completed tasks')),
+          const PopupMenuDivider(),
           const PopupMenuItem(value: 'archive', child: Text('Archive')),
           const PopupMenuDivider(),
         ],
@@ -91,6 +95,8 @@ class _IndexCardWidgetState extends ConsumerState<IndexCardWidget> {
         undo.record(CardHidden(cardId: card.id));
       case 'snooze':
         await _showSnoozeMenu(context, globalPos, card.id);
+      case 'del_completed':
+        await ref.read(taskRepositoryProvider).deleteCompletedForCard(card.id);
       case 'archive':
         await repo.archive(card.id);
         undo.record(

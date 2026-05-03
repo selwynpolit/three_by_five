@@ -126,4 +126,38 @@ class TasksDao {
                 t.dueDate.isSmallerOrEqualValue(end))
             ..orderBy([(t) => OrderingTerm.asc(t.dueDate)]))
           .watch();
+
+  /// All non-deleted tasks whose card is in [cardIds], ordered by card then
+  /// sort_order for flat list display.
+  Stream<List<AppTask>> watchTasksForCards(List<String> cardIds) {
+    if (cardIds.isEmpty) return Stream.value([]);
+    return (_db.select(_db.tasks)
+          ..where((t) => t.deletedAt.isNull() & t.cardId.isIn(cardIds))
+          ..orderBy([
+            (t) => OrderingTerm.asc(t.cardId),
+            (t) => OrderingTerm.asc(t.sortOrder, nulls: NullsOrder.last),
+            (t) => OrderingTerm.asc(t.createdAt),
+          ]))
+        .watch();
+  }
+
+  /// Soft-delete all completed tasks on [cardId].
+  Future<void> deleteCompletedForCard(String cardId) =>
+      (_db.update(_db.tasks)
+            ..where((t) =>
+                t.cardId.equals(cardId) &
+                t.isCompleted.equals(true) &
+                t.deletedAt.isNull()))
+          .write(TasksCompanion(deletedAt: Value(DateTime.now())));
+
+  /// Soft-delete all completed tasks for cards in [cardIds].
+  Future<void> deleteCompletedForCards(List<String> cardIds) async {
+    if (cardIds.isEmpty) return;
+    await (_db.update(_db.tasks)
+          ..where((t) =>
+              t.cardId.isIn(cardIds) &
+              t.isCompleted.equals(true) &
+              t.deletedAt.isNull()))
+        .write(TasksCompanion(deletedAt: Value(DateTime.now())));
+  }
 }
