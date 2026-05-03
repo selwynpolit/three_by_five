@@ -10,6 +10,7 @@ import '../../../data/database/app_database.dart';
 import '../../providers/canvas_providers.dart';
 import '../../providers/card_providers.dart';
 import '../../providers/stack_providers.dart';
+import '../../providers/task_providers.dart';
 import 'widgets/index_card_widget.dart';
 
 class CardView extends ConsumerWidget {
@@ -21,32 +22,37 @@ class CardView extends ConsumerWidget {
     final cardsAsync = ref.watch(cardsProvider);
     final stacks = ref.watch(stacksProvider);
     final activeStackId = ref.watch(activeStackIdProvider);
+    final hiddenStackIds = ref.watch(hiddenStackIdsProvider);
+    // Show stack pill on each card only when multiple stacks are visible.
+    final showStackPill = hiddenStackIds.isEmpty;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _CardViewHeader(layoutMode: layoutMode, activeStackId: activeStackId),
         Expanded(
-          child: cardsAsync.when(
-            loading: () => const SizedBox.shrink(),
-            error: (e, _) => Center(child: Text('Error: $e')),
-            data: (cards) {
-              if (cards.isEmpty) return const _EmptyState();
-              final stackMap = stacks.maybeWhen(
-                data: (list) =>
-                    <String, AppStack>{for (final s in list) s.id: s},
-                orElse: () => <String, AppStack>{},
-              );
-              return switch (layoutMode) {
-                CardLayoutMode.grid =>
-                  _GridView(cards: cards, stackMap: stackMap),
-                CardLayoutMode.scattered =>
-                  _ScatteredView(cards: cards, stackMap: stackMap),
-                CardLayoutMode.canvas =>
-                  _CanvasView(cards: cards, stackMap: stackMap),
-              };
-            },
-          ),
+          child: Builder(builder: (context) {
+            // valueOrNull prevents flicker during periodic resurfacing refresh.
+            final cards = cardsAsync.valueOrNull;
+            if (cards == null) return const SizedBox.shrink();
+            if (cardsAsync.hasError) {
+              return Center(child: Text('Error: ${cardsAsync.error}'));
+            }
+            if (cards.isEmpty) return const _EmptyState();
+            final stackMap = stacks.maybeWhen(
+              data: (list) =>
+                  <String, AppStack>{for (final s in list) s.id: s},
+              orElse: () => <String, AppStack>{},
+            );
+            return switch (layoutMode) {
+              CardLayoutMode.grid =>
+                _GridView(cards: cards, stackMap: stackMap, showStackPill: showStackPill),
+              CardLayoutMode.scattered =>
+                _ScatteredView(cards: cards, stackMap: stackMap, showStackPill: showStackPill),
+              CardLayoutMode.canvas =>
+                _CanvasView(cards: cards, stackMap: stackMap, showStackPill: showStackPill),
+            };
+          }),
         ),
       ],
     );
@@ -63,14 +69,41 @@ class _CardViewHeader extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final showHidden = ref.watch(showHiddenCardsProvider);
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(
           AppSpacing.viewPadding, 14, AppSpacing.viewPadding, 10),
       child: Row(
         children: [
           _LayoutPicker(current: layoutMode),
+          const SizedBox(width: 4),
+          // Show hidden toggle
+          _PickerBtn(
+            icon: showHidden
+                ? Icons.visibility_outlined
+                : Icons.visibility_off_outlined,
+            tooltip: showHidden ? 'Showing hidden cards' : 'Show hidden cards',
+            active: showHidden,
+            onTap: () =>
+                ref.read(showHiddenCardsProvider.notifier).toggle(),
+          ),
           const Spacer(),
-          if (activeStackId != null) _NewCardButton(stackId: activeStackId!),
+          Builder(builder: (context) {
+            // Use the effective stack (falls back to first visible stack when
+            // no specific stack is selected), so these buttons always work.
+            final createStackId =
+                ref.watch(effectiveCreateStackProvider);
+            if (createStackId == null) return const SizedBox.shrink();
+            return Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _GenerateButton(stackId: createStackId),
+                const SizedBox(width: 8),
+                _NewCardButton(stackId: createStackId),
+              ],
+            );
+          }),
         ],
       ),
     );
@@ -198,8 +231,8 @@ class _NewCardButtonState extends ConsumerState<_NewCardButton> {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
             color: _hovered
-                ? AppColors.accent
-                : AppColors.accent.withValues(alpha: 0.12),
+                ? Colors.white
+                : Colors.white.withValues(alpha: 0.82),
             borderRadius: BorderRadius.circular(6),
           ),
           child: Row(
@@ -207,12 +240,12 @@ class _NewCardButtonState extends ConsumerState<_NewCardButton> {
             children: [
               Icon(Icons.add,
                   size: 14,
-                  color: _hovered ? Colors.white : AppColors.accent),
+                  color: AppColors.accent),
               const SizedBox(width: 4),
               Text(
                 'New Card',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: _hovered ? Colors.white : AppColors.accent,
+                      color: AppColors.accent,
                       fontWeight: FontWeight.w600,
                     ),
               ),
@@ -227,9 +260,10 @@ class _NewCardButtonState extends ConsumerState<_NewCardButton> {
 // ── Grid layout ───────────────────────────────────────────────────────────────
 
 class _GridView extends StatelessWidget {
-  const _GridView({required this.cards, required this.stackMap});
+  const _GridView({required this.cards, required this.stackMap, required this.showStackPill});
   final List<AppCard> cards;
   final Map<String, AppStack> stackMap;
+  final bool showStackPill;
 
   @override
   Widget build(BuildContext context) {
@@ -244,6 +278,7 @@ class _GridView extends StatelessWidget {
               .map((c) => IndexCardWidget(
                     card: c,
                     stackColor: _stackColor(c, stackMap),
+                    stackName: showStackPill ? stackMap[c.stackId]?.name : null,
                   ))
               .toList(),
         ),
@@ -255,9 +290,10 @@ class _GridView extends StatelessWidget {
 // ── Scattered layout ──────────────────────────────────────────────────────────
 
 class _ScatteredView extends StatelessWidget {
-  const _ScatteredView({required this.cards, required this.stackMap});
+  const _ScatteredView({required this.cards, required this.stackMap, required this.showStackPill});
   final List<AppCard> cards;
   final Map<String, AppStack> stackMap;
+  final bool showStackPill;
 
   // Deterministic rotation (-3.5° … +3.5°) derived from card ID hash.
   double _angle(String id) =>
@@ -283,6 +319,7 @@ class _ScatteredView extends StatelessWidget {
                 child: IndexCardWidget(
                   card: c,
                   stackColor: _stackColor(c, stackMap),
+                  stackName: showStackPill ? stackMap[c.stackId]?.name : null,
                 ),
               ),
             );
@@ -296,9 +333,10 @@ class _ScatteredView extends StatelessWidget {
 // ── Free canvas layout ────────────────────────────────────────────────────────
 
 class _CanvasView extends ConsumerWidget {
-  const _CanvasView({required this.cards, required this.stackMap});
+  const _CanvasView({required this.cards, required this.stackMap, required this.showStackPill});
   final List<AppCard> cards;
   final Map<String, AppStack> stackMap;
+  final bool showStackPill;
 
   static Offset _defaultPos(int index) {
     const cols = 3;
@@ -330,6 +368,7 @@ class _CanvasView extends ConsumerWidget {
               key: ValueKey(e.value.id),
               card: e.value,
               stackColor: _stackColor(e.value, stackMap),
+              stackName: showStackPill ? stackMap[e.value.stackId]?.name : null,
               initialOffset: pos,
             );
           }).toList(),
@@ -345,10 +384,12 @@ class _CanvasCard extends ConsumerStatefulWidget {
     required this.card,
     required this.stackColor,
     required this.initialOffset,
+    this.stackName,
   });
   final AppCard card;
   final Color stackColor;
   final Offset initialOffset;
+  final String? stackName;
 
   @override
   ConsumerState<_CanvasCard> createState() => _CanvasCardState();
@@ -372,7 +413,8 @@ class _CanvasCardState extends ConsumerState<_CanvasCard> {
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          IndexCardWidget(card: widget.card, stackColor: widget.stackColor),
+          IndexCardWidget(card: widget.card, stackColor: widget.stackColor,
+              stackName: widget.stackName),
           // Drag handle covers the top accent strip + header area.
           Positioned(
             top: 0,
@@ -431,6 +473,112 @@ class _EmptyState extends StatelessWidget {
                 ?.copyWith(color: AppColors.textTertiary),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Generate button (test data) ───────────────────────────────────────────────
+
+class _GenerateButton extends ConsumerStatefulWidget {
+  const _GenerateButton({required this.stackId});
+  final String stackId;
+
+  @override
+  ConsumerState<_GenerateButton> createState() => _GenerateButtonState();
+}
+
+class _GenerateButtonState extends ConsumerState<_GenerateButton> {
+  bool _hovered = false;
+  bool _busy = false;
+
+  static const _nowTitles = [
+    'Review weekly goals',
+    'Send project update',
+    'Fix blocking bug',
+    'Prepare meeting notes',
+    'Reply to emails',
+  ];
+  static const _laterTitles = [
+    'Read documentation',
+    'Refactor auth module',
+    'Write unit tests',
+    'Update roadmap',
+    'Schedule 1-on-1s',
+  ];
+
+  Future<void> _generate() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final cardRepo = ref.read(cardRepositoryProvider);
+    final taskRepo = ref.read(taskRepositoryProvider);
+    final now = DateTime.now();
+    for (var c = 0; c < 3; c++) {
+      final cardDate = now.subtract(Duration(days: c));
+      final cardId = await cardRepo.create(
+        stackId: widget.stackId,
+        date: cardDate,
+      );
+      for (var i = 0; i < 5; i++) {
+        await taskRepo.create(
+          cardId: cardId,
+          title: _nowTitles[i],
+          column: 'now',
+        );
+        await taskRepo.create(
+          cardId: cardId,
+          title: _laterTitles[i],
+          column: 'later',
+        );
+      }
+    }
+    if (mounted) setState(() => _busy = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Generate 3 test cards with 5 tasks each',
+      waitDuration: const Duration(milliseconds: 600),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: GestureDetector(
+          onTap: _generate,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: _hovered
+                  ? Colors.white.withValues(alpha: 0.3)
+                  : Colors.white.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: _busy
+                ? const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 1.5,
+                        color: Colors.white),
+                  )
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.auto_awesome,
+                          size: 13, color: Colors.white),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Generate',
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(color: Colors.white),
+                      ),
+                    ],
+                  ),
+          ),
+        ),
       ),
     );
   }

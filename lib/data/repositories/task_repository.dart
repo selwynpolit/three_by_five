@@ -53,6 +53,7 @@ class TaskRepository {
 
   Future<void> update({
     required String id,
+    String? cardId,
     String? title,
     String? description,
     String? column,
@@ -66,6 +67,7 @@ class TaskRepository {
   }) =>
       _dao.update(TasksCompanion(
         id: Value(id),
+        cardId: cardId != null ? Value(cardId) : const Value.absent(),
         title: title != null ? Value(title) : const Value.absent(),
         description:
             description != null ? Value(description) : const Value.absent(),
@@ -107,7 +109,9 @@ class TaskRepository {
   Future<String> duplicate(String taskId) async {
     final src = await getById(taskId);
     if (src == null) return '';
-    return create(
+
+    // Create the duplicate first (null sort_order → appears at end via NULLS LAST).
+    final newId = await create(
       cardId: src.cardId,
       title: src.title,
       column: src.columnName,
@@ -115,5 +119,18 @@ class TaskRepository {
       description: src.description,
       dueDate: src.dueDate,
     );
+
+    // Immediately reorder so the duplicate sits right after the original.
+    final columnTasks =
+        await _dao.watchByCardAndColumn(src.cardId, src.columnName).first;
+    final ids = columnTasks.map((t) => t.id).toList();
+    final srcIdx = ids.indexOf(taskId);
+    if (srcIdx != -1 && ids.contains(newId)) {
+      ids.remove(newId);
+      ids.insert(srcIdx + 1, newId);
+      await _dao.reorder(ids);
+    }
+
+    return newId;
   }
 }

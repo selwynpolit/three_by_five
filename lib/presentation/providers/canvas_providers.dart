@@ -2,6 +2,8 @@ import 'dart:ui';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'stack_providers.dart';
+
 enum CardLayoutMode { grid, scattered, canvas }
 
 final cardLayoutModeProvider =
@@ -18,4 +20,77 @@ class CardCanvasPositionsNotifier extends Notifier<Map<String, Offset>> {
 
   void setPosition(String cardId, Offset offset) =>
       state = {...state, cardId: offset};
+}
+
+/// Cards whose header has been clicked — shown with an accent selection ring.
+final selectedCardIdsProvider =
+    NotifierProvider<SelectedCardIdsNotifier, Set<String>>(
+  SelectedCardIdsNotifier.new,
+);
+
+class SelectedCardIdsNotifier extends Notifier<Set<String>> {
+  @override
+  Set<String> build() => const {};
+
+  /// Replace the selection with exactly this one card.
+  void selectOnly(String id) => state = {id};
+
+  /// Add or remove a card without clearing others (⌘-click / Shift-click).
+  void toggle(String id) {
+    final next = Set<String>.from(state);
+    if (next.contains(id)) {
+      next.remove(id);
+    } else {
+      next.add(id);
+    }
+    state = next;
+  }
+
+  void clear() => state = const {};
+}
+
+/// The stack that should receive new cards from ⌘N / New Card.
+/// Returns [activeStackIdProvider] if set, otherwise the first non-hidden stack,
+/// otherwise the first stack of any kind.
+///
+/// This means ⌘N works even when "All Stacks" is selected in the sidebar.
+final effectiveCreateStackProvider = Provider<String?>((ref) {
+  final active = ref.watch(activeStackIdProvider);
+  if (active != null) return active;
+  final stacks = ref.watch(stacksProvider);
+  final hidden = ref.watch(hiddenStackIdsProvider);
+  return stacks.maybeWhen(
+    data: (list) {
+      if (list.isEmpty) return null;
+      final visible = list.where((s) => !hidden.contains(s.id));
+      return visible.isNotEmpty ? visible.first.id : list.first.id;
+    },
+    orElse: () => null,
+  );
+});
+
+/// Stack IDs whose cards are currently hidden from the card view.
+/// Empty = all stacks visible (the default).
+final hiddenStackIdsProvider =
+    NotifierProvider<HiddenStackIdsNotifier, Set<String>>(
+  HiddenStackIdsNotifier.new,
+);
+
+class HiddenStackIdsNotifier extends Notifier<Set<String>> {
+  @override
+  Set<String> build() => const {};
+
+  void toggle(String id) {
+    final next = Set<String>.from(state);
+    if (next.contains(id)) {
+      next.remove(id);
+    } else {
+      next.add(id);
+    }
+    state = next;
+  }
+
+  void showAll() => state = const {};
+
+  void hideAll(Iterable<String> ids) => state = Set.from(ids);
 }

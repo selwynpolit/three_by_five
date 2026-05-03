@@ -35,11 +35,22 @@ class _CardColumnWidgetState extends ConsumerState<CardColumnWidget> {
   void _reorder(String draggedId, int insertBefore) {
     final tasks = widget.tasks;
     final from = tasks.indexWhere((t) => t.id == draggedId);
-    if (from == -1) return; // dragged from a different column — ignore
+
+    if (from == -1) {
+      // Cross-column or cross-card move. Always set the target cardId and
+      // column so tasks can be dragged between both columns and cards.
+      ref.read(taskRepositoryProvider).update(
+            id: draggedId,
+            cardId: widget.cardId,
+            column: widget.column,
+          );
+      setState(() => _dropIndex = null);
+      return;
+    }
 
     var to = insertBefore;
-    if (to > from) to -= 1; // account for the removed item
-    if (from == to) return; // no actual movement
+    if (to > from) to -= 1;
+    if (from == to) { setState(() => _dropIndex = null); return; }
 
     final reordered = List<AppTask>.from(tasks);
     final item = reordered.removeAt(from);
@@ -78,22 +89,45 @@ class _CardColumnWidgetState extends ConsumerState<CardColumnWidget> {
 
           // ── Task list ─────────────────────────────────────────────
           if (tasks.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              child: Text(
-                'Nothing here',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppColors.textDisabled,
-                      fontStyle: FontStyle.italic,
-                    ),
+            // Empty column — whole area is a drop target so cross-column
+            // drags can land here.
+            DragTarget<String>(
+              builder: (_, candidates, rejected) => AnimatedContainer(
+                duration: const Duration(milliseconds: 80),
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                decoration: BoxDecoration(
+                  color: candidates.isNotEmpty
+                      ? AppColors.accent.withValues(alpha: 0.07)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  candidates.isNotEmpty ? 'Drop here' : 'Nothing here',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: candidates.isNotEmpty
+                            ? AppColors.accent
+                            : AppColors.textDisabled,
+                        fontStyle: candidates.isNotEmpty
+                            ? FontStyle.normal
+                            : FontStyle.italic,
+                      ),
+                ),
               ),
+              onWillAcceptWithDetails: (_) {
+                setState(() => _dropIndex = 0);
+                return true;
+              },
+              onLeave: (_) => setState(() => _dropIndex = null),
+              onAcceptWithDetails: (d) {
+                _reorder(d.data, 0);
+                setState(() => _dropIndex = null);
+              },
             )
           else ...[
             for (var i = 0; i < tasks.length; i++) ...[
               _DropZone(
                 active: _dropIndex == i,
                 onWillAccept: (id) {
-                  if (!tasks.any((t) => t.id == id)) return false;
                   setState(() => _dropIndex = i);
                   return true;
                 },
@@ -111,18 +145,15 @@ class _CardColumnWidgetState extends ConsumerState<CardColumnWidget> {
                 isHidden: widget.isHidden,
               ),
             ],
-            // Final drop zone — append to end of list.
+            // Final drop zone — append to end.
             _DropZone(
               active: _dropIndex == tasks.length,
               onWillAccept: (id) {
-                if (!tasks.any((t) => t.id == id)) return false;
                 setState(() => _dropIndex = tasks.length);
                 return true;
               },
               onLeave: (_) {
-                if (_dropIndex == tasks.length) {
-                  setState(() => _dropIndex = null);
-                }
+                if (_dropIndex == tasks.length) setState(() => _dropIndex = null);
               },
               onAccept: (id) {
                 _reorder(id, tasks.length);
@@ -295,7 +326,7 @@ class _AddTaskButtonState extends ConsumerState<_AddTaskButton> {
   }
 
   void _onFocusChange() {
-    if (!_focusNode.hasFocus && _isAdding) _submit();
+    if (!_focusNode.hasFocus && _isAdding) _submit(keepOpen: false);
   }
 
   void _startAdding() {
@@ -311,14 +342,23 @@ class _AddTaskButtonState extends ConsumerState<_AddTaskButton> {
     });
   }
 
-  Future<void> _submit() async {
+  Future<void> _submit({bool keepOpen = false}) async {
     final text = _controller.text.trim();
-    _cancel();
-    if (text.isNotEmpty) {
-      await ref
-          .read(taskRepositoryProvider)
-          .create(cardId: widget.cardId, title: text, column: widget.column);
+    if (text.isEmpty) {
+      _cancel();
+      return;
     }
+    _controller.clear();
+    if (keepOpen) {
+      // Stay open for rapid consecutive task entry.
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) { if (mounted) _focusNode.requestFocus(); });
+    } else {
+      setState(() => _isAdding = false);
+    }
+    await ref
+        .read(taskRepositoryProvider)
+        .create(cardId: widget.cardId, title: text, column: widget.column);
   }
 
   @override
@@ -327,13 +367,17 @@ class _AddTaskButtonState extends ConsumerState<_AddTaskButton> {
       return CallbackShortcuts(
         bindings: {
           const SingleActivator(LogicalKeyboardKey.escape): _cancel,
+          const SingleActivator(LogicalKeyboardKey.enter):
+              () => _submit(keepOpen: true),
         },
         child: TextField(
           controller: _controller,
           focusNode: _focusNode,
           style: Theme.of(context).textTheme.bodySmall,
+          minLines: 1,
+          maxLines: 3,
           decoration: InputDecoration(
-            hintText: 'Task title…',
+            hintText: 'Task title… (Enter to add, Esc to close)',
             hintStyle: Theme.of(context)
                 .textTheme
                 .bodySmall
@@ -345,8 +389,7 @@ class _AddTaskButtonState extends ConsumerState<_AddTaskButton> {
               borderSide: BorderSide(color: AppColors.accent, width: 1),
             ),
           ),
-          onSubmitted: (_) => _submit(),
-          textInputAction: TextInputAction.done,
+          textInputAction: TextInputAction.newline,
         ),
       );
     }

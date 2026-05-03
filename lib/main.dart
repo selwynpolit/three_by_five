@@ -14,7 +14,7 @@ void main() async {
     center: true,
     title: '3by5',
     titleBarStyle: TitleBarStyle.normal,
-    backgroundColor: Color(0xFFF2EDE3),
+    backgroundColor: Color(0xFF3A5544),
   );
 
   windowManager.waitUntilReadyToShow(windowOptions, () async {

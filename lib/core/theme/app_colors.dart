@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 
 abstract final class AppColors {
   // ── Canvas & surfaces ───────────────────────────────────────────────────────
-  static const canvas = Color(0xFFF2EDE3);
-  static const sidebarBg = Color(0xFFEAE5DB);
-  static const cardSurface = Color(0xFFFDFBF6);
+  static const canvas = Color(0xFFF5F2EA);
+  static const sidebarBg = Color(0xFFECE8DF);
+  static const cardSurface = Color(0xFFFDFBF6); // reverted — user wants original card color
+
+  // ── App canvas (casino-table green behind the cards) ─────────────────────────
+  static const appBackground = Color(0xFF3A5544);
 
   // ── Borders & dividers ──────────────────────────────────────────────────────
   static const cardBorder = Color(0xFFDDD8CE);

@@ -1,4 +1,8 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -7,6 +11,7 @@ import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/daos/settings_dao.dart';
 import '../../domain/enums/app_view.dart';
+import '../providers/canvas_providers.dart';
 import '../providers/card_providers.dart';
 import '../providers/database_provider.dart';
 import '../providers/init_provider.dart';
@@ -18,6 +23,7 @@ import '../views/card_view/card_view.dart';
 import '../views/kanban_view/kanban_view.dart';
 import '../views/task_detail/task_detail_panel.dart';
 import '../views/today_view/today_view.dart';
+import '../widgets/undo_toast.dart';
 import 'sidebar.dart';
 
 const _kPanelWidth = 440.0;
@@ -51,20 +57,47 @@ class _ShellReady extends ConsumerStatefulWidget {
 }
 
 class _ShellReadyState extends ConsumerState<_ShellReady> {
+  Timer? _resurfaceTimer;
+
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (widget.initialStackId != null) {
-        ref
-            .read(activeStackIdProvider.notifier)
-            .set(widget.initialStackId);
-      }
+    // Active stack and hidden stacks are restored by appInitProvider via
+    // Future.microtask — no widget lifecycle callback needed here.
+    _resurfaceTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) ref.invalidate(cardsProvider);
     });
+    // Global ESC handler — fires before any widget's onKeyEvent so it
+    // works even when a Quill editor or nested CallbackShortcuts would
+    // otherwise consume the key.
+    HardwareKeyboard.instance.addHandler(_globalKeyHandler);
+  }
+
+  @override
+  void dispose() {
+    _resurfaceTimer?.cancel();
+    HardwareKeyboard.instance.removeHandler(_globalKeyHandler);
+    super.dispose();
+  }
+
+  bool _globalKeyHandler(KeyEvent event) {
+    if (event is KeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.escape) {
+      if (mounted && ref.read(selectedTaskIdProvider) != null) {
+        // Schedule so we don't call setState during a build phase.
+        SchedulerBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            ref.read(selectedTaskIdProvider.notifier).select(null);
+          }
+        });
+        return true; // consumed — prevents Quill etc. from seeing it too
+      }
+    }
+    return false;
   }
 
   Future<void> _createCard() async {
-    final stackId = ref.read(activeStackIdProvider);
+    final stackId = ref.read(effectiveCreateStackProvider);
     if (stackId == null) return;
     await ref
         .read(cardRepositoryProvider)
@@ -82,6 +115,15 @@ class _ShellReadyState extends ConsumerState<_ShellReady> {
       }
     });
 
+    ref.listen(hiddenStackIdsProvider, (_, next) {
+      final dao = SettingsDao(ref.read(appDatabaseProvider));
+      if (next.isEmpty) {
+        dao.remove('hiddenStackIds');
+      } else {
+        dao.set('hiddenStackIds', jsonEncode(next.toList()));
+      }
+    });
+
     final activeView = ref.watch(activeViewProvider);
     final activeStackId = ref.watch(activeStackIdProvider);
     final selectedTaskId = ref.watch(selectedTaskIdProvider);
@@ -92,6 +134,11 @@ class _ShellReadyState extends ConsumerState<_ShellReady> {
         bindings: {
           const SingleActivator(LogicalKeyboardKey.keyN, meta: true):
               _createCard,
+          const SingleActivator(LogicalKeyboardKey.escape): () {
+            if (ref.read(selectedTaskIdProvider) != null) {
+              ref.read(selectedTaskIdProvider.notifier).select(null);
+            }
+          },
         },
         child: Focus(
           autofocus: true,
@@ -99,7 +146,9 @@ class _ShellReadyState extends ConsumerState<_ShellReady> {
       children: [
         const Sidebar(),
         Expanded(
-          child: Stack(
+          child: ColoredBox(
+            color: AppColors.appBackground,
+            child: Stack(
             fit: StackFit.expand,
             children: [
               // ── Main view ────────────────────────────────────────
@@ -125,20 +174,24 @@ class _ShellReadyState extends ConsumerState<_ShellReady> {
                 ),
               ),
 
-              // ── Backdrop ─────────────────────────────────────────
-              AnimatedOpacity(
-                opacity: selectedTaskId != null ? 1.0 : 0.0,
-                duration: const Duration(milliseconds: 200),
-                child: IgnorePointer(
-                  ignoring: selectedTaskId == null,
-                  child: GestureDetector(
-                    onTap: () => ref
-                        .read(selectedTaskIdProvider.notifier)
-                        .select(null),
-                    child: const ColoredBox(
-                        color: Color(0x22000000),
-                        child: SizedBox.expand()),
-                  ),
+              // ── Undo toast ───────────────────────────────────────
+              const Align(
+                alignment: Alignment.bottomCenter,
+                child: Padding(
+                  padding: EdgeInsets.only(bottom: 24),
+                  child: UndoToast(),
+                ),
+              ),
+
+              // ── Backdrop — visual only; pointer events pass through so
+              //    task rows remain clickable while the panel is open. ────
+              IgnorePointer(
+                child: AnimatedOpacity(
+                  opacity: selectedTaskId != null ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 200),
+                  child: const ColoredBox(
+                      color: Color(0x18000000),
+                      child: SizedBox.expand()),
                 ),
               ),
 
@@ -163,6 +216,7 @@ class _ShellReadyState extends ConsumerState<_ShellReady> {
                 ),
               ),
             ],
+            ),
           ),
         ),
       ],

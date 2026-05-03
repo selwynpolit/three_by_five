@@ -9,6 +9,8 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../data/database/app_database.dart';
 import '../../../providers/detail_providers.dart';
+import '../../../utils/quill_image_embed.dart';
+import '../../../utils/quill_utils.dart';
 
 class NotesFeedWidget extends StatelessWidget {
   const NotesFeedWidget({super.key, required this.notesAsync});
@@ -61,28 +63,8 @@ class _NoteItemState extends ConsumerState<_NoteItem> {
 
   static final _timeFmt = DateFormat('d MMM yyyy · h:mm a');
 
-  // Parses Quill Delta JSON or falls back to wrapping plain text.
-  // Created as read-only by default (view mode).
-  static QuillController _parse(String body) {
-    try {
-      final ops = jsonDecode(body) as List;
-      return QuillController(
-        document: Document.fromJson(ops),
-        selection: const TextSelection.collapsed(offset: 0),
-        readOnly: true,
-      );
-    } catch (_) {
-      // Plain text — represent as a minimal Delta JSON structure.
-      final text = body.isEmpty ? '\n' : '$body\n';
-      return QuillController(
-        document: Document.fromJson([
-          {'insert': text}
-        ]),
-        selection: const TextSelection.collapsed(offset: 0),
-        readOnly: true,
-      );
-    }
-  }
+  static QuillController _parse(String body) =>
+      quillControllerFromBody(body, readOnly: true);
 
   @override
   void initState() {
@@ -251,6 +233,7 @@ class _NoteItemState extends ConsumerState<_NoteItem> {
                   expands: false,
                   scrollable: false,
                   padding: EdgeInsets.zero,
+                  embedBuilders: const [QuillImageEmbedBuilder()],
                   customStyles: DefaultStyles(
                     paragraph: DefaultTextBlockStyle(
                       AppTypography.textTheme.bodyMedium!.copyWith(

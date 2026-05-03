@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../data/database/app_database.dart';
+import '../../../../domain/undo/undo_action.dart';
 import '../../../providers/tag_providers.dart';
 import '../../../providers/task_providers.dart';
 import '../../../providers/ui_state_providers.dart';
@@ -60,9 +61,13 @@ class _TaskRowWidgetState extends ConsumerState<TaskRowWidget>
   }
 
   Future<void> _toggle() async {
+    final wasCompleted = widget.task.isCompleted;
     await ref.read(taskRepositoryProvider).markComplete(
           widget.task.id,
-          completed: !widget.task.isCompleted,
+          completed: !wasCompleted,
+        );
+    ref.read(lastUndoActionProvider.notifier).record(
+          TaskCompleted(taskId: widget.task.id, wasCompleted: wasCompleted),
         );
   }
 
@@ -96,6 +101,9 @@ class _TaskRowWidgetState extends ConsumerState<TaskRowWidget>
         await ref.read(taskRepositoryProvider).update(id: task.id, column: 'now');
       case 'delete':
         await ref.read(taskRepositoryProvider).delete(task.id);
+        ref
+            .read(lastUndoActionProvider.notifier)
+            .record(TaskDeleted(taskId: task.id));
     }
   }
 

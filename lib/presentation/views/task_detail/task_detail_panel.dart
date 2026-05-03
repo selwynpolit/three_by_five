@@ -1,14 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import 'dart:io';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/theme/app_colors.dart';
@@ -20,8 +19,10 @@ import '../../providers/detail_providers.dart';
 import '../../providers/tag_providers.dart';
 import '../../providers/task_providers.dart';
 import '../../providers/ui_state_providers.dart';
+import '../../utils/quill_utils.dart';
 import 'widgets/attachments_section_widget.dart';
 import 'widgets/description_editor_widget.dart';
+import 'widgets/note_composer_widget.dart';
 import 'widgets/notes_feed_widget.dart';
 import 'widgets/tags_editor_widget.dart';
 import 'widgets/task_meta_widget.dart';
@@ -62,27 +63,12 @@ class _TaskDetailPanelState extends ConsumerState<TaskDetailPanel> {
     _titleController.text = task.title;
     _titleController.addListener(_scheduleTitleSave);
 
-    _quillController = _createQuill(task.description);
+    _quillController = quillControllerFromBody(task.description);
     _quillController!.addListener(_scheduleDescSave);
 
-    _noteQuillController = QuillController.basic();
+    _noteQuillController = quillControllerFromBody(null);
 
     setState(() => _ready = true);
-  }
-
-  QuillController _createQuill(String? description) {
-    if (description == null || description.isEmpty) {
-      return QuillController.basic();
-    }
-    try {
-      final ops = jsonDecode(description) as List<dynamic>;
-      return QuillController(
-        document: Document.fromJson(ops),
-        selection: const TextSelection.collapsed(offset: 0),
-      );
-    } catch (_) {
-      return QuillController.basic();
-    }
   }
 
   // ── Auto-save ──────────────────────────────────────────────────────────────
@@ -117,7 +103,7 @@ class _TaskDetailPanelState extends ConsumerState<TaskDetailPanel> {
 
   void _clearNoteComposer() {
     final old = _noteQuillController;
-    setState(() => _noteQuillController = QuillController.basic());
+    setState(() => _noteQuillController = quillControllerFromBody(null));
     WidgetsBinding.instance.addPostFrameCallback((_) => old?.dispose());
   }
 
@@ -358,7 +344,7 @@ class _TaskDetailPanelState extends ConsumerState<TaskDetailPanel> {
             ),
 
             // ── Note composer ──────────────────────────────────────
-            _NoteComposer(
+            NoteComposerWidget(
               controller: _noteQuillController!,
               focusNode: _noteFocusNode,
               onSubmit: _submitNote,
@@ -459,240 +445,6 @@ class _IconBtnState extends State<_IconBtn> {
             borderRadius: BorderRadius.circular(6),
           ),
           child: Icon(widget.icon, size: 18, color: widget.color),
-        ),
-      ),
-    );
-  }
-}
-
-// ── Note composer (Quill-based) ────────────────────────────────────────────────
-
-class _NoteComposer extends StatefulWidget {
-  const _NoteComposer({
-    required this.controller,
-    required this.focusNode,
-    required this.onSubmit,
-  });
-
-  final QuillController controller;
-  final FocusNode focusNode;
-  final VoidCallback onSubmit;
-
-  @override
-  State<_NoteComposer> createState() => _NoteComposerState();
-}
-
-class _NoteComposerState extends State<_NoteComposer> {
-  bool _focused = false;
-
-  @override
-  void initState() {
-    super.initState();
-    widget.focusNode.addListener(_onFocus);
-  }
-
-  @override
-  void didUpdateWidget(_NoteComposer old) {
-    super.didUpdateWidget(old);
-    if (old.focusNode != widget.focusNode) {
-      old.focusNode.removeListener(_onFocus);
-      widget.focusNode.addListener(_onFocus);
-    }
-  }
-
-  @override
-  void dispose() {
-    widget.focusNode.removeListener(_onFocus);
-    super.dispose();
-  }
-
-  void _onFocus() =>
-      setState(() => _focused = widget.focusNode.hasFocus);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-      decoration: const BoxDecoration(
-        border: Border(
-            top: BorderSide(color: AppColors.divider, width: 0.5)),
-        color: AppColors.cardSurface,
-      ),
-      child: CallbackShortcuts(
-        bindings: {
-          const SingleActivator(LogicalKeyboardKey.enter, meta: true):
-              widget.onSubmit,
-        },
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Toolbar — animates in when editor is focused.
-            AnimatedCrossFade(
-              duration: const Duration(milliseconds: 160),
-              crossFadeState: _focused
-                  ? CrossFadeState.showFirst
-                  : CrossFadeState.showSecond,
-              firstChild: Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: QuillSimpleToolbar(
-                  controller: widget.controller,
-                  config: const QuillSimpleToolbarConfig(
-                    showDividers: false,
-                    showFontFamily: false,
-                    showFontSize: false,
-                    showBoldButton: true,
-                    showItalicButton: true,
-                    showSmallButton: false,
-                    showUnderLineButton: false,
-                    showStrikeThrough: false,
-                    showInlineCode: false,
-                    showColorButton: false,
-                    showBackgroundColorButton: false,
-                    showClearFormat: false,
-                    showAlignmentButtons: false,
-                    showLeftAlignment: false,
-                    showCenterAlignment: false,
-                    showRightAlignment: false,
-                    showJustifyAlignment: false,
-                    showHeaderStyle: false,
-                    showListNumbers: true,
-                    showListBullets: true,
-                    showListCheck: false,
-                    showCodeBlock: false,
-                    showQuote: false,
-                    showIndent: false,
-                    showLink: false,
-                    showUndo: true,
-                    showRedo: false,
-                    showDirection: false,
-                    showSearchButton: false,
-                    showSubscript: false,
-                    showSuperscript: false,
-                    multiRowsDisplay: false,
-                    toolbarSize: 28,
-                    toolbarIconAlignment: WrapAlignment.start,
-                  ),
-                ),
-              ),
-              secondChild: const SizedBox.shrink(),
-            ),
-
-            // Editor
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 120),
-              constraints:
-                  const BoxConstraints(minHeight: 52, maxHeight: 130),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: AppColors.canvas,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: _focused
-                      ? AppColors.accent
-                      : AppColors.cardBorder,
-                  width: _focused ? 1 : 0.5,
-                ),
-              ),
-              child: QuillEditor.basic(
-                controller: widget.controller,
-                focusNode: widget.focusNode,
-                config: QuillEditorConfig(
-                  placeholder: 'Add a note… (⌘↵ to save)',
-                  autoFocus: false,
-                  expands: false,
-                  scrollable: true,
-                  padding: EdgeInsets.zero,
-                  customStyles: DefaultStyles(
-                    paragraph: DefaultTextBlockStyle(
-                      AppTypography.textTheme.bodyMedium!.copyWith(
-                        color: AppColors.textPrimary,
-                        height: 1.5,
-                      ),
-                      HorizontalSpacing.zero,
-                      VerticalSpacing.zero,
-                      VerticalSpacing.zero,
-                      null,
-                    ),
-                    placeHolder: DefaultTextBlockStyle(
-                      AppTypography.textTheme.bodyMedium!.copyWith(
-                        color: AppColors.textDisabled,
-                        height: 1.5,
-                      ),
-                      HorizontalSpacing.zero,
-                      VerticalSpacing.zero,
-                      VerticalSpacing.zero,
-                      null,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-            // Submit row — visible when focused.
-            AnimatedSize(
-              duration: const Duration(milliseconds: 160),
-              child: _focused
-                  ? Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            '⌘↵ to save',
-                            style: Theme.of(context)
-                                .textTheme
-                                .labelMedium
-                                ?.copyWith(color: AppColors.textDisabled),
-                          ),
-                          _SaveButton(onTap: widget.onSubmit),
-                        ],
-                      ),
-                    )
-                  : const SizedBox.shrink(),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SaveButton extends StatefulWidget {
-  const _SaveButton({required this.onTap});
-  final VoidCallback onTap;
-
-  @override
-  State<_SaveButton> createState() => _SaveButtonState();
-}
-
-class _SaveButtonState extends State<_SaveButton> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: _hovered ? AppColors.accent : AppColors.accentLight,
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Text(
-            'Save',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color:
-                      _hovered ? AppColors.textInverse : AppColors.accent,
-                  fontWeight: FontWeight.w600,
-                ),
-          ),
         ),
       ),
     );
