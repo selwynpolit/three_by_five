@@ -117,15 +117,9 @@ class _KanbanViewState extends ConsumerState<KanbanView> {
           dragging: _dragging,
           onDragStart: (t) => setState(() => _dragging = t),
           onDragEnd: () => setState(() => _dragging = null),
-          onDrop: (task) => _moveTask(task, col.id),
         );
       },
     );
-  }
-
-  Future<void> _moveTask(AppTask task, String colId) async {
-    if (task.kanbanStageId == colId) return;
-    await ref.read(taskRepositoryProvider).updateKanbanStage(task.id, colId);
   }
 
   Future<void> _addColumn() async {
@@ -314,7 +308,6 @@ class _KanbanColumn extends ConsumerStatefulWidget {
     required this.dragging,
     required this.onDragStart,
     required this.onDragEnd,
-    required this.onDrop,
   });
 
   final AppBoardColumn column;
@@ -323,7 +316,6 @@ class _KanbanColumn extends ConsumerStatefulWidget {
   final AppTask? dragging;
   final ValueChanged<AppTask> onDragStart;
   final VoidCallback onDragEnd;
-  final ValueChanged<AppTask> onDrop;
 
   @override
   ConsumerState<_KanbanColumn> createState() => _KanbanColumnState();
@@ -332,6 +324,7 @@ class _KanbanColumn extends ConsumerStatefulWidget {
 class _KanbanColumnState extends ConsumerState<_KanbanColumn> {
   bool _headerHovered = false;
   bool _editingTitle = false;
+  int? _dropIndex;
   late TextEditingController _titleCtrl;
   final _titleFocus = FocusNode();
 
@@ -401,180 +394,225 @@ class _KanbanColumnState extends ConsumerState<_KanbanColumn> {
     }
   }
 
+  Future<void> _handleDrop(AppTask task, int insertBefore) async {
+    setState(() => _dropIndex = null);
+    final tasks = widget.tasks;
+    final from = tasks.indexWhere((t) => t.id == task.id);
+    if (from == -1) {
+      // Cross-column: just update the stage; the task will appear at the end.
+      await ref
+          .read(taskRepositoryProvider)
+          .updateKanbanStage(task.id, widget.column.id);
+    } else {
+      // Same-column reorder.
+      var to = insertBefore;
+      if (to > from) to--;
+      if (from == to) return;
+      final reordered = List<AppTask>.from(tasks)
+        ..removeAt(from)
+        ..insert(to, tasks[from]);
+      await ref
+          .read(taskRepositoryProvider)
+          .reorder(reordered.map((t) => t.id).toList());
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final incomplete = widget.tasks.where((t) => !t.isCompleted).length;
     final total = widget.tasks.length;
+    final lit = _dropIndex != null;
 
     return SizedBox(
       width: _kColWidth,
-      child: DragTarget<AppTask>(
-        onWillAcceptWithDetails: (d) =>
-            d.data.kanbanStageId != widget.column.id,
-        onAcceptWithDetails: (d) => widget.onDrop(d.data),
-        builder: (context, candidates, _) {
-          final isOver = candidates.isNotEmpty;
-          return Column(
-            children: [
-              // ── Column header ─────────────────────────────────────────────
-              MouseRegion(
-                onEnter: (_) => setState(() => _headerHovered = true),
-                onExit: (_) => setState(() => _headerHovered = false),
-                child: GestureDetector(
-                  onDoubleTap: _startEdit,
-                  child: Container(
-                    height: _kColHeaderH,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.14),
-                      borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(_kColRadius)),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: _editingTitle
-                              ? CallbackShortcuts(
-                                  bindings: {
-                                    const SingleActivator(
-                                            LogicalKeyboardKey.enter):
-                                        _commitEdit,
-                                    const SingleActivator(
-                                            LogicalKeyboardKey.escape):
-                                        () {
-                                      _titleCtrl.text = widget.column.title;
-                                      setState(() => _editingTitle = false);
-                                    },
-                                  },
-                                  child: TextField(
-                                    controller: _titleCtrl,
-                                    focusNode: _titleFocus,
-                                    onSubmitted: (_) => _commitEdit(),
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppColors.textInverse,
-                                    ),
-                                    decoration: const InputDecoration(
-                                      isDense: true,
-                                      contentPadding: EdgeInsets.zero,
-                                      border: InputBorder.none,
-                                    ),
-                                  ),
-                                )
-                              : Text(
-                                  widget.column.title,
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppColors.textInverse,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
+      child: Column(
+        children: [
+          // ── Column header ───────────────────────────────────────────────
+          MouseRegion(
+            onEnter: (_) => setState(() => _headerHovered = true),
+            onExit: (_) => setState(() => _headerHovered = false),
+            child: GestureDetector(
+              onDoubleTap: _startEdit,
+              child: Container(
+                height: _kColHeaderH,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: lit ? 0.20 : 0.14),
+                  borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(_kColRadius)),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _editingTitle
+                          ? CallbackShortcuts(
+                              bindings: {
+                                const SingleActivator(
+                                        LogicalKeyboardKey.enter):
+                                    _commitEdit,
+                                const SingleActivator(
+                                        LogicalKeyboardKey.escape): () {
+                                  _titleCtrl.text = widget.column.title;
+                                  setState(() => _editingTitle = false);
+                                },
+                              },
+                              child: TextField(
+                                controller: _titleCtrl,
+                                focusNode: _titleFocus,
+                                onSubmitted: (_) => _commitEdit(),
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textInverse,
                                 ),
-                        ),
-                        const SizedBox(width: 6),
-                        // Task count badge
-                        if (!_editingTitle) ...[
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 7, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.18),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Text(
-                              incomplete == total
-                                  ? '$total'
-                                  : '$incomplete/$total',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: AppColors.textInverse
-                                    .withValues(alpha: 0.8),
+                                decoration: const InputDecoration(
+                                  isDense: true,
+                                  contentPadding: EdgeInsets.zero,
+                                  border: InputBorder.none,
+                                ),
                               ),
-                            ),
-                          ),
-                          // Delete button (hover)
-                          AnimatedOpacity(
-                            duration: const Duration(milliseconds: 120),
-                            opacity: _headerHovered ? 1.0 : 0.0,
-                            child: Padding(
-                              padding: const EdgeInsets.only(left: 4),
-                              child: IconButton(
-                                icon: const Icon(Icons.delete_outline),
-                                iconSize: 15,
-                                color: AppColors.textInverse
-                                    .withValues(alpha: 0.6),
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(),
-                                tooltip: 'Delete column',
-                                onPressed: _deleteColumn,
+                            )
+                          : Text(
+                              widget.column.title,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textInverse,
                               ),
+                              overflow: TextOverflow.ellipsis,
                             ),
-                          ),
-                        ],
-                      ],
                     ),
-                  ),
-                ),
-              ),
-
-              // ── Column body (drop target) ─────────────────────────────────
-              Expanded(
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 100),
-                  decoration: BoxDecoration(
-                    color: isOver
-                        ? Colors.white.withValues(alpha: 0.20)
-                        : Colors.white.withValues(alpha: 0.09),
-                    borderRadius: const BorderRadius.vertical(
-                        bottom: Radius.circular(_kColRadius)),
-                    border: isOver
-                        ? Border.all(
-                            color: Colors.white.withValues(alpha: 0.4),
-                            width: 1.5)
-                        : null,
-                  ),
-                  child: widget.tasks.isEmpty
-                      ? _emptyState(isOver)
-                      : ListView.builder(
-                          padding: const EdgeInsets.all(10),
-                          itemCount: widget.tasks.length,
-                          itemBuilder: (ctx, i) {
-                            final task = widget.tasks[i];
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 8),
-                              child: _KanbanTaskCard(
-                                task: task,
-                                card: widget.cardMap[task.cardId],
-                                isDragging: widget.dragging?.id == task.id,
-                                onDragStart: () =>
-                                    widget.onDragStart(task),
-                                onDragEnd: widget.onDragEnd,
-                              ),
-                            );
-                          },
+                    const SizedBox(width: 6),
+                    if (!_editingTitle) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.18),
+                          borderRadius: BorderRadius.circular(10),
                         ),
+                        child: Text(
+                          incomplete == total
+                              ? '$total'
+                              : '$incomplete/$total',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppColors.textInverse
+                                .withValues(alpha: 0.8),
+                          ),
+                        ),
+                      ),
+                      AnimatedOpacity(
+                        duration: const Duration(milliseconds: 120),
+                        opacity: _headerHovered ? 1.0 : 0.0,
+                        child: Padding(
+                          padding: const EdgeInsets.only(left: 4),
+                          child: IconButton(
+                            icon: const Icon(Icons.delete_outline),
+                            iconSize: 15,
+                            color: AppColors.textInverse
+                                .withValues(alpha: 0.6),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            tooltip: 'Delete column',
+                            onPressed: _deleteColumn,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-            ],
-          );
-        },
+            ),
+          ),
+
+          // ── Column body ────────────────────────────────────────────────
+          Expanded(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 100),
+              decoration: BoxDecoration(
+                color: lit
+                    ? Colors.white.withValues(alpha: 0.20)
+                    : Colors.white.withValues(alpha: 0.09),
+                borderRadius: const BorderRadius.vertical(
+                    bottom: Radius.circular(_kColRadius)),
+                border: lit
+                    ? Border.all(
+                        color: Colors.white.withValues(alpha: 0.4),
+                        width: 1.5)
+                    : null,
+              ),
+              child: widget.tasks.isEmpty
+                  ? _buildEmptyDropTarget()
+                  : ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
+                      // interleave drop zones: [zone, card, zone, card, …, zone]
+                      itemCount: widget.tasks.length * 2 + 1,
+                      itemBuilder: (ctx, i) {
+                        if (i.isEven) {
+                          final pos = i ~/ 2;
+                          return _KanbanDropZone(
+                            active: _dropIndex == pos,
+                            onWillAccept: (task) {
+                              final from = widget.tasks
+                                  .indexWhere((t) => t.id == task.id);
+                              // Skip the zone directly above / below self.
+                              if (from != -1 &&
+                                  (pos == from || pos == from + 1)) {
+                                return false;
+                              }
+                              setState(() => _dropIndex = pos);
+                              return true;
+                            },
+                            onLeave: (_) {
+                              if (_dropIndex == pos) {
+                                setState(() => _dropIndex = null);
+                              }
+                            },
+                            onAccept: (task) => _handleDrop(task, pos),
+                          );
+                        }
+                        final task = widget.tasks[(i - 1) ~/ 2];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 0),
+                          child: _KanbanTaskCard(
+                            task: task,
+                            card: widget.cardMap[task.cardId],
+                            isDragging: widget.dragging?.id == task.id,
+                            onDragStart: () => widget.onDragStart(task),
+                            onDragEnd: widget.onDragEnd,
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _emptyState(bool isOver) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Text(
-          isOver ? 'Drop here' : 'No tasks',
-          style: TextStyle(
-            fontSize: 12,
-            color: isOver
-                ? Colors.white.withValues(alpha: 0.8)
-                : Colors.white.withValues(alpha: 0.3),
-            fontStyle: isOver ? FontStyle.normal : FontStyle.italic,
+  Widget _buildEmptyDropTarget() {
+    return DragTarget<AppTask>(
+      onWillAcceptWithDetails: (_) {
+        setState(() => _dropIndex = 0);
+        return true;
+      },
+      onLeave: (_) => setState(() => _dropIndex = null),
+      onAcceptWithDetails: (d) => _handleDrop(d.data, 0),
+      builder: (_, candidates, _) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(
+            candidates.isNotEmpty ? 'Drop here' : 'No tasks',
+            style: TextStyle(
+              fontSize: 12,
+              color: candidates.isNotEmpty
+                  ? Colors.white.withValues(alpha: 0.8)
+                  : Colors.white.withValues(alpha: 0.3),
+              fontStyle:
+                  candidates.isNotEmpty ? FontStyle.normal : FontStyle.italic,
+            ),
           ),
         ),
       ),
@@ -747,6 +785,45 @@ class _KanbanTaskCardState extends ConsumerState<_KanbanTaskCard> {
           ],
         ],
       ),
+    );
+  }
+}
+
+// ── Within-column drop zone ───────────────────────────────────────────────────
+
+class _KanbanDropZone extends StatelessWidget {
+  const _KanbanDropZone({
+    required this.active,
+    required this.onWillAccept,
+    required this.onLeave,
+    required this.onAccept,
+  });
+
+  final bool active;
+  final bool Function(AppTask) onWillAccept;
+  final void Function(AppTask?) onLeave;
+  final void Function(AppTask) onAccept;
+
+  @override
+  Widget build(BuildContext context) {
+    return DragTarget<AppTask>(
+      builder: (_, candidates, _) => SizedBox(
+        height: 12,
+        child: Center(
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 80),
+            height: active ? 2.5 : 0,
+            margin: const EdgeInsets.symmetric(horizontal: 4),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.75),
+              borderRadius: BorderRadius.circular(1.5),
+            ),
+          ),
+        ),
+      ),
+      onWillAcceptWithDetails: (d) => onWillAccept(d.data),
+      onLeave: onLeave,
+      onAcceptWithDetails: (d) => onAccept(d.data),
     );
   }
 }
@@ -1036,16 +1113,9 @@ class _CardKanbanContentState extends ConsumerState<_CardKanbanContent> {
           dragging: _dragging,
           onDragStart: (t) => setState(() => _dragging = t),
           onDragEnd: () => setState(() => _dragging = null),
-          onDrop: (task) => _moveTask(task, col.id),
         );
       },
     );
   }
 
-  Future<void> _moveTask(AppTask task, String colId) async {
-    if (task.kanbanStageId == colId) return;
-    await ref
-        .read(taskRepositoryProvider)
-        .updateKanbanStage(task.id, colId);
-  }
 }

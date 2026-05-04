@@ -31,6 +31,11 @@ final showHiddenInTaskListProvider = StateProvider<bool>((ref) => false);
 final cardLayoutModeProvider =
     StateProvider<CardLayoutMode>((ref) => CardLayoutMode.grid);
 
+/// Tracks the last card-based layout (grid/scattered/canvas) so the view can
+/// be restored when navigating back from kanban or the task-list layout.
+final lastCardLayoutModeProvider =
+    StateProvider<CardLayoutMode>((ref) => CardLayoutMode.grid);
+
 final cardCanvasPositionsProvider =
     NotifierProvider<CardCanvasPositionsNotifier, Map<String, Offset>>(
   CardCanvasPositionsNotifier.new,

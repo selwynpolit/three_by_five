@@ -42,6 +42,8 @@ class CardView extends ConsumerWidget {
             if (cardsAsync.hasError) {
               return Center(child: Text('Error: ${cardsAsync.error}'));
             }
+            // Task list doesn't depend on cards being visible.
+            if (layoutMode == CardLayoutMode.taskList) return const _TaskListView();
             if (cards.isEmpty) return const _EmptyState();
             final stackMap = stacks.maybeWhen(
               data: (list) =>
@@ -124,8 +126,12 @@ class _LayoutPicker extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    void set(CardLayoutMode m) =>
-        ref.read(cardLayoutModeProvider.notifier).state = m;
+    void set(CardLayoutMode m) {
+      ref.read(cardLayoutModeProvider.notifier).state = m;
+      if (m != CardLayoutMode.taskList) {
+        ref.read(lastCardLayoutModeProvider.notifier).state = m;
+      }
+    }
 
     return Row(
       mainAxisSize: MainAxisSize.min,

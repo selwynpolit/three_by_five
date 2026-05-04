@@ -124,6 +124,16 @@ class _ShellReadyState extends ConsumerState<_ShellReady> {
       }
     });
 
+    // When navigating back to card view, restore the last card layout
+    // (so task-list mode doesn't persist across sidebar navigation).
+    ref.listen(activeViewProvider, (prev, next) {
+      const cardViews = {AppView.cardView, AppView.allCardsView};
+      if (cardViews.contains(next) && !cardViews.contains(prev)) {
+        ref.read(cardLayoutModeProvider.notifier).state =
+            ref.read(lastCardLayoutModeProvider);
+      }
+    });
+
     final activeView = ref.watch(activeViewProvider);
     final activeStackId = ref.watch(activeStackIdProvider);
     final selectedTaskId = ref.watch(selectedTaskIdProvider);
