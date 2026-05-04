@@ -59,6 +59,25 @@ final activeBoardCardIdProvider =
     );
 
 typedef _$ActiveBoardCardId = Notifier<String?>;
+String _$searchOverlayVisibleHash() =>
+    r'6fd29a2aaba2f59554609909396e9a9690f58220';
+
+/// Whether the global search overlay is visible.
+///
+/// Copied from [SearchOverlayVisible].
+@ProviderFor(SearchOverlayVisible)
+final searchOverlayVisibleProvider =
+    NotifierProvider<SearchOverlayVisible, bool>.internal(
+      SearchOverlayVisible.new,
+      name: r'searchOverlayVisibleProvider',
+      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+          ? null
+          : _$searchOverlayVisibleHash,
+      dependencies: null,
+      allTransitiveDependencies: null,
+    );
+
+typedef _$SearchOverlayVisible = Notifier<bool>;
 String _$lastUndoActionHash() => r'0f31e70fda99c1ae0aebfbc7d59e445d038de97a';
 
 /// The last reversible action performed. Non-null = undo toast should be shown.

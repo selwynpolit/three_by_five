@@ -31,6 +31,17 @@ class ActiveBoardCardId extends _$ActiveBoardCardId {
   void set(String? id) => state = id;
 }
 
+/// Whether the global search overlay is visible.
+@Riverpod(keepAlive: true)
+class SearchOverlayVisible extends _$SearchOverlayVisible {
+  @override
+  bool build() => false;
+
+  void show() => state = true;
+  void hide() => state = false;
+  void toggle() => state = !state;
+}
+
 /// The last reversible action performed. Non-null = undo toast should be shown.
 /// Use [record] after any undoable operation; [consume] to execute the undo and
 /// clear state; [clear] to dismiss the toast without undoing.
