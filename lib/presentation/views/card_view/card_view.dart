@@ -693,6 +693,7 @@ class _TaskListView extends ConsumerStatefulWidget {
 
 class _TaskListViewState extends ConsumerState<_TaskListView> {
   final _searchCtrl = TextEditingController();
+  final _scrollCtrl = ScrollController();
 
   @override
   void initState() {
@@ -705,8 +706,9 @@ class _TaskListViewState extends ConsumerState<_TaskListView> {
   @override
   void dispose() {
     _searchCtrl.dispose();
-    Future.microtask(
-        () => ref.read(taskListSearchProvider.notifier).state = '');
+    _scrollCtrl.dispose();
+    // Clear search state before super.dispose() — ref is invalid after that.
+    ref.read(taskListSearchProvider.notifier).state = '';
     super.dispose();
   }
 
@@ -902,7 +904,9 @@ class _TaskListViewState extends ConsumerState<_TaskListView> {
                   ),
                 )
               : Scrollbar(
+                  controller: _scrollCtrl,
                   child: ListView.separated(
+                    controller: _scrollCtrl,
                     padding: const EdgeInsets.only(bottom: 24),
                     itemCount: rows.length,
                     separatorBuilder: (_, _) =>
