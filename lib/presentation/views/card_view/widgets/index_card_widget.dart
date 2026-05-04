@@ -214,8 +214,7 @@ class _IndexCardWidgetState extends ConsumerState<IndexCardWidget> {
           color: (_isHiddenOrSnoozed || _isArchived)
               ? AppColors.cardSurface.withValues(alpha: 0.6)
               : _cardTintedColor,
-          borderRadius:
-              BorderRadius.circular(AppSpacing.cardRadius),
+          // Square corners — real 3×5 index cards have no rounding.
           border: Border.all(
             color: borderColor,
             width: borderWidth,
@@ -224,98 +223,106 @@ class _IndexCardWidgetState extends ConsumerState<IndexCardWidget> {
           boxShadow:
               _hovered ? AppShadows.cardHover : AppShadows.card,
         ),
-        child: ClipRRect(
-          borderRadius:
-              BorderRadius.circular(AppSpacing.cardRadius),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _CardHeader(
-                card: widget.card,
-                stackColor: widget.stackColor,
-                stackName: widget.stackName,
-                isHiddenOrArchived: _isHiddenOrSnoozed || _isArchived,
-                isSelected: isSelected,
-                hasKanbanTasks: hasKanbanTasks,
-                onTap: () {
-                  final notifier =
-                      ref.read(selectedCardIdsProvider.notifier);
-                  final multiSelect =
-                      HardwareKeyboard.instance.isMetaPressed ||
-                      HardwareKeyboard.instance.isShiftPressed;
-                  if (multiSelect) {
-                    // ⌘/Shift: add or remove without clearing others.
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _CardHeader(
+              card: widget.card,
+              stackColor: widget.stackColor,
+              stackName: widget.stackName,
+              isHiddenOrArchived: _isHiddenOrSnoozed || _isArchived,
+              isSelected: isSelected,
+              hasKanbanTasks: hasKanbanTasks,
+              onTap: () {
+                final notifier =
+                    ref.read(selectedCardIdsProvider.notifier);
+                final multiSelect =
+                    HardwareKeyboard.instance.isMetaPressed ||
+                    HardwareKeyboard.instance.isShiftPressed;
+                if (multiSelect) {
+                  notifier.toggle(widget.card.id);
+                } else {
+                  final current = ref.read(selectedCardIdsProvider);
+                  if (current.contains(widget.card.id)) {
                     notifier.toggle(widget.card.id);
                   } else {
-                    // Plain click: select exclusively, or deselect if
-                    // this card is already the only selection.
-                    final current = ref.read(selectedCardIdsProvider);
-                    if (current.contains(widget.card.id)) {
-                      notifier.toggle(widget.card.id); // deselect
-                    } else {
-                      notifier.selectOnly(widget.card.id);
-                    }
+                    notifier.selectOnly(widget.card.id);
                   }
-                },
-                onRightClick: (pos) => _showCardMenu(context, pos),
-                onTitleSaved: (title) => ref
-                    .read(cardRepositoryProvider)
-                    .update(id: widget.card.id, projectTitle: title),
-              ),
+                }
+              },
+              onRightClick: (pos) => _showCardMenu(context, pos),
+              onTitleSaved: (title) => ref
+                  .read(cardRepositoryProvider)
+                  .update(id: widget.card.id, projectTitle: title),
+            ),
 
-              const Divider(height: 1),
+            const Divider(height: 1),
 
-              // Task columns — Row without IntrinsicHeight to avoid overflow.
-              // A right-border on the NOW column acts as the divider.
-              tasksAsync.when(
-                loading: () => const SizedBox(height: 60),
-                error: (e, _) => const SizedBox(height: 60),
-                data: (tasks) {
-                  final now = tasks
-                      .where((t) =>
-                          t.columnName == 'now' && t.deletedAt == null)
-                      .toList();
-                  final later = tasks
-                      .where((t) =>
-                          t.columnName == 'later' && t.deletedAt == null)
-                      .toList();
+            // Task columns with ruled-paper background.
+            tasksAsync.when(
+              loading: () => const SizedBox(height: 60),
+              error: (e, _) => const SizedBox(height: 60),
+              data: (tasks) {
+                final now = tasks
+                    .where((t) =>
+                        t.columnName == 'now' && t.deletedAt == null)
+                    .toList();
+                final later = tasks
+                    .where((t) =>
+                        t.columnName == 'later' && t.deletedAt == null)
+                    .toList();
 
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: DecoratedBox(
-                          decoration: const BoxDecoration(
-                            border: Border(
-                              right: BorderSide(
-                                  color: AppColors.divider, width: 0.5),
+                return Stack(
+                  children: [
+                    // Horizontal ruling lines behind the task content.
+                    Positioned.fill(
+                      child: CustomPaint(
+                        painter: _RuledLines(
+                          color: (_isHiddenOrSnoozed || _isArchived)
+                              ? const Color(0xFFCFDFE8)
+                                  .withValues(alpha: 0.5)
+                              : const Color(0xFFCFDFE8),
+                        ),
+                      ),
+                    ),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: DecoratedBox(
+                            decoration: const BoxDecoration(
+                              border: Border(
+                                right: BorderSide(
+                                    color: AppColors.divider,
+                                    width: 0.5),
+                              ),
+                            ),
+                            child: CardColumnWidget(
+                              label: 'NOW',
+                              tasks: now,
+                              cardId: widget.card.id,
+                              column: 'now',
+                              isHidden: _isHiddenOrSnoozed,
                             ),
                           ),
+                        ),
+                        Expanded(
                           child: CardColumnWidget(
-                            label: 'NOW',
-                            tasks: now,
+                            label: 'LATER',
+                            tasks: later,
                             cardId: widget.card.id,
-                            column: 'now',
+                            column: 'later',
                             isHidden: _isHiddenOrSnoozed,
                           ),
                         ),
-                      ),
-                      Expanded(
-                        child: CardColumnWidget(
-                          label: 'LATER',
-                          tasks: later,
-                          cardId: widget.card.id,
-                          column: 'later',
-                          isHidden: _isHiddenOrSnoozed,
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ],
-          ),
+                      ],
+                    ),
+                  ],
+                );
+              },
+            ),
+          ],
         ),
       ),
     );
@@ -644,6 +651,30 @@ class _StatusBadge extends StatelessWidget {
       ),
     );
   }
+}
+
+// ── Ruled-paper background painter ───────────────────────────────────────────
+
+class _RuledLines extends CustomPainter {
+  const _RuledLines({required this.color});
+  final Color color;
+
+  static const double _spacing = 22.0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 0.6;
+    var y = _spacing;
+    while (y < size.height) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+      y += _spacing;
+    }
+  }
+
+  @override
+  bool shouldRepaint(_RuledLines old) => old.color != color;
 }
 
 class _KanbanBadge extends StatelessWidget {
