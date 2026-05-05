@@ -1,12 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
-
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../data/database/app_database.dart';
 import '../../../../domain/undo/undo_action.dart';
-import '../../../providers/tag_providers.dart';
 import '../../../providers/task_providers.dart';
 import '../../../providers/ui_state_providers.dart';
 
@@ -110,7 +107,6 @@ class _TaskRowWidgetState extends ConsumerState<TaskRowWidget>
   @override
   Widget build(BuildContext context) {
     final task = widget.task;
-    final tags = ref.watch(tagsForTaskProvider(task.id));
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
@@ -119,20 +115,16 @@ class _TaskRowWidgetState extends ConsumerState<TaskRowWidget>
             ref.read(selectedTaskIdProvider.notifier).select(task.id),
         onSecondaryTapDown: (d) =>
             _showContextMenu(context, d.globalPosition),
-        child: _buildRow(context, task, tags),
+        child: _buildRow(context, task),
       ),
     );
   }
 
-  Widget _buildRow(
-    BuildContext context,
-    AppTask task,
-    AsyncValue<List<AppTag>> tags,
-  ) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
+  Widget _buildRow(BuildContext context, AppTask task) {
+    return SizedBox(
+      height: 22,
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           // ── Priority indicator ─────────────────────────────────
           _PriorityDot(priority: task.priority),
@@ -175,34 +167,24 @@ class _TaskRowWidgetState extends ConsumerState<TaskRowWidget>
           ),
           const SizedBox(width: 7),
 
-          // ── Title + chips ──────────────────────────────────────
+          // ── Title ─────────────────────────────────────────────
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  task.title,
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodyMedium
-                      ?.copyWith(
-                        color: widget.isHidden
-                            ? AppColors.textDisabled
-                            : task.isCompleted
-                                ? AppColors.textCompleted
-                                : AppColors.textPrimary,
-                        decoration: task.isCompleted
-                            ? TextDecoration.lineThrough
-                            : null,
-                        decorationColor:
-                            AppColors.textCompleted,
-                      ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 2),
-                _ChipRow(task: task, tagsAsync: tags),
-              ],
+            child: Text(
+              task.title,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontSize: 13,
+                    color: widget.isHidden
+                        ? AppColors.textDisabled
+                        : task.isCompleted
+                            ? AppColors.textCompleted
+                            : AppColors.textPrimary,
+                    decoration: task.isCompleted
+                        ? TextDecoration.lineThrough
+                        : null,
+                    decorationColor: AppColors.textCompleted,
+                  ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -239,102 +221,3 @@ class _PriorityDot extends StatelessWidget {
   }
 }
 
-// ── Due-date + tag chips ──────────────────────────────────────────────────────
-
-class _ChipRow extends StatelessWidget {
-  const _ChipRow({required this.task, required this.tagsAsync});
-
-  final AppTask task;
-  final AsyncValue<List<AppTag>> tagsAsync;
-
-  @override
-  Widget build(BuildContext context) {
-    final chips = <Widget>[];
-
-    // Due date chip
-    if (task.dueDate != null) {
-      chips.add(_DueDateChip(dueDate: task.dueDate!));
-    }
-
-    // Tag chips (first 3 to keep row compact)
-    tagsAsync.whenData((tags) {
-      for (final tag in tags.take(3)) {
-        chips.add(_TagChip(name: tag.name));
-      }
-    });
-
-    if (chips.isEmpty) return const SizedBox.shrink();
-
-    return Padding(
-      padding: const EdgeInsets.only(top: 2, bottom: 2),
-      child: Wrap(spacing: 4, runSpacing: 3, children: chips),
-    );
-  }
-}
-
-class _DueDateChip extends StatelessWidget {
-  const _DueDateChip({required this.dueDate});
-  final DateTime dueDate;
-
-  static final _fmt = DateFormat('d MMM');
-
-  @override
-  Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final due = DateTime(dueDate.year, dueDate.month, dueDate.day);
-
-    final (bg, fg, label) = due.isBefore(today)
-        ? (AppColors.overdueBg, AppColors.overdueText, _fmt.format(dueDate))
-        : due == today
-            ? (AppColors.dueTodayBg, AppColors.dueTodayText, 'Today')
-            : (AppColors.dueFutureBg, AppColors.dueFutureText,
-                _fmt.format(dueDate));
-
-    return _Chip(label: label, bg: bg, fg: fg);
-  }
-}
-
-class _TagChip extends StatelessWidget {
-  const _TagChip({required this.name});
-  final String name;
-
-  @override
-  Widget build(BuildContext context) => _Chip(
-        label: name,
-        bg: AppColors.tagBg,
-        fg: AppColors.tagText,
-      );
-}
-
-class _Chip extends StatelessWidget {
-  const _Chip({
-    required this.label,
-    required this.bg,
-    required this.fg,
-  });
-
-  final String label;
-  final Color bg;
-  final Color fg;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(
-        label,
-        style: Theme.of(context).textTheme.labelMedium?.copyWith(
-              color: fg,
-              fontSize: 10,
-              letterSpacing: 0,
-              fontWeight: FontWeight.w600,
-            ),
-      ),
-    );
-  }
-}

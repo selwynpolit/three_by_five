@@ -23,5 +23,5 @@ abstract final class AppSpacing {
   // ── Task row ────────────────────────────────────────────────────────────────
   static const double taskRowMinHeight = 34;
   static const double checkboxSize = 18;
-  static const double columnHeaderHeight = 26;
+  static const double columnHeaderHeight = 22;
 }

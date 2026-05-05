@@ -203,16 +203,18 @@ class _PickerBtnState extends State<_PickerBtn> {
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
               color: widget.active
-                  ? AppColors.accent.withValues(alpha: 0.12)
+                  ? Colors.white.withValues(alpha: 0.22)
                   : _hovered
-                      ? AppColors.divider
+                      ? Colors.white.withValues(alpha: 0.10)
                       : Colors.transparent,
               borderRadius: BorderRadius.circular(6),
             ),
             child: Icon(
               widget.icon,
               size: 16,
-              color: widget.active ? AppColors.accent : AppColors.textTertiary,
+              color: widget.active
+                  ? Colors.white
+                  : Colors.white.withValues(alpha: 0.55),
             ),
           ),
         ),

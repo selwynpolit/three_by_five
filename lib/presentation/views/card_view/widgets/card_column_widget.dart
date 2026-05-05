@@ -68,7 +68,7 @@ class _CardColumnWidgetState extends ConsumerState<CardColumnWidget> {
       padding: const EdgeInsets.only(
         left: AppSpacing.cardPadding,
         right: AppSpacing.cardPadding,
-        top: 6,
+        top: 0,
         bottom: AppSpacing.sm,
       ),
       child: Column(
@@ -191,7 +191,7 @@ class _DropZone extends StatelessWidget {
   Widget build(BuildContext context) {
     return DragTarget<String>(
       builder: (_, candidates, rejected) => SizedBox(
-        height: 8,
+        height: 4,
         child: Center(
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 80),
@@ -400,19 +400,39 @@ class _AddTaskButtonState extends ConsumerState<_AddTaskButton> {
       onExit: (_) => setState(() => _hovered = false),
       child: GestureDetector(
         onTap: _startAdding,
-        child: AnimatedOpacity(
+        child: AnimatedContainer(
           duration: const Duration(milliseconds: 120),
-          opacity: _hovered ? 1.0 : 0.35,
+          padding:
+              const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+          decoration: BoxDecoration(
+            color: _hovered
+                ? AppColors.accent.withValues(alpha: 0.08)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(
+              color: _hovered
+                  ? AppColors.accent.withValues(alpha: 0.3)
+                  : AppColors.cardBorder,
+              width: 0.5,
+            ),
+          ),
           child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.add, size: 13, color: AppColors.textTertiary),
+              Icon(Icons.add,
+                  size: 12,
+                  color: _hovered
+                      ? AppColors.accent
+                      : AppColors.textTertiary),
               const SizedBox(width: 4),
               Text(
                 'Add task',
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: AppColors.textTertiary),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: _hovered
+                          ? AppColors.accent
+                          : AppColors.textSecondary,
+                      fontSize: 11,
+                    ),
               ),
             ],
           ),

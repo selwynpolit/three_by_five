@@ -11,11 +11,24 @@ import '../../providers/ui_state_providers.dart';
 
 // ── Today dashboard ───────────────────────────────────────────────────────────
 
-class TodayView extends ConsumerWidget {
+class TodayView extends ConsumerStatefulWidget {
   const TodayView({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<TodayView> createState() => _TodayViewState();
+}
+
+class _TodayViewState extends ConsumerState<TodayView> {
+  final _scrollCtrl = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final overdue = ref.watch(overdueTasksProvider).valueOrNull ?? [];
     final today = ref.watch(tasksDueTodayProvider).valueOrNull ?? [];
 
@@ -48,7 +61,9 @@ class TodayView extends ConsumerWidget {
           _Header(),
           Expanded(
             child: Scrollbar(
+              controller: _scrollCtrl,
               child: SingleChildScrollView(
+                controller: _scrollCtrl,
                 padding:
                     const EdgeInsets.fromLTRB(40, 28, 40, 48),
                 child: Center(
