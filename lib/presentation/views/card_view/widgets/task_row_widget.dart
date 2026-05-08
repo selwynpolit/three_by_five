@@ -124,7 +124,7 @@ class _TaskRowWidgetState extends ConsumerState<TaskRowWidget>
     return SizedBox(
       height: 22,
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // ── Priority indicator ─────────────────────────────────
           _PriorityDot(priority: task.priority),
@@ -165,9 +165,15 @@ class _TaskRowWidgetState extends ConsumerState<TaskRowWidget>
               ),
             ),
           ),
-          const SizedBox(width: 7),
+          // ── Due-date dot ───────────────────────────────────────
+          if (task.dueDate != null) ...[
+            const SizedBox(width: 4),
+            _DueDot(task.dueDate!),
+          ] else
+            const SizedBox(width: 7),
 
           // ── Title ─────────────────────────────────────────────
+          if (task.dueDate != null) const SizedBox(width: 4),
           Expanded(
             child: Text(
               task.title,
@@ -188,6 +194,33 @@ class _TaskRowWidgetState extends ConsumerState<TaskRowWidget>
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Due-date dot ─────────────────────────────────────────────────────────────
+
+class _DueDot extends StatelessWidget {
+  const _DueDot(this.date);
+  final DateTime date;
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final day = DateTime(date.year, date.month, date.day);
+    final color = day.isBefore(today)
+        ? AppColors.overdueText
+        : day == today
+            ? AppColors.dueTodayText
+            : AppColors.dueFutureText;
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Container(
+        width: 6,
+        height: 6,
+        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
       ),
     );
   }

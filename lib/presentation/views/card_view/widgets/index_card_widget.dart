@@ -255,6 +255,9 @@ class _IndexCardWidgetState extends ConsumerState<IndexCardWidget> {
               onTitleSaved: (title) => ref
                   .read(cardRepositoryProvider)
                   .update(id: widget.card.id, projectTitle: title),
+              onDateSaved: (date) => ref
+                  .read(cardRepositoryProvider)
+                  .update(id: widget.card.id, date: date),
             ),
 
             const Divider(height: 1),
@@ -273,50 +276,60 @@ class _IndexCardWidgetState extends ConsumerState<IndexCardWidget> {
                         t.columnName == 'later' && t.deletedAt == null)
                     .toList();
 
-                return Stack(
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Horizontal ruling lines behind the task content.
-                    Positioned.fill(
-                      child: CustomPaint(
-                        painter: _RuledLines(
-                          color: (_isHiddenOrSnoozed || _isArchived)
-                              ? const Color(0xFFCFDFE8)
-                                  .withValues(alpha: 0.5)
-                              : const Color(0xFFCFDFE8),
-                        ),
-                      ),
-                    ),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    Stack(
                       children: [
-                        Expanded(
-                          child: DecoratedBox(
-                            decoration: const BoxDecoration(
-                              border: Border(
-                                right: BorderSide(
-                                    color: AppColors.divider,
-                                    width: 0.5),
+                        // Horizontal ruling lines behind the task content.
+                        Positioned.fill(
+                          child: CustomPaint(
+                            painter: _RuledLines(
+                              color: (_isHiddenOrSnoozed || _isArchived)
+                                  ? const Color(0xFFCFDFE8)
+                                      .withValues(alpha: 0.5)
+                                  : const Color(0xFFCFDFE8),
+                            ),
+                          ),
+                        ),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: DecoratedBox(
+                                decoration: const BoxDecoration(
+                                  border: Border(
+                                    right: BorderSide(
+                                        color: AppColors.divider,
+                                        width: 0.5),
+                                  ),
+                                ),
+                                child: CardColumnWidget(
+                                  label: 'NOW',
+                                  tasks: now,
+                                  cardId: widget.card.id,
+                                  column: 'now',
+                                  isHidden: _isHiddenOrSnoozed,
+                                ),
                               ),
                             ),
-                            child: CardColumnWidget(
-                              label: 'NOW',
-                              tasks: now,
-                              cardId: widget.card.id,
-                              column: 'now',
-                              isHidden: _isHiddenOrSnoozed,
+                            Expanded(
+                              child: CardColumnWidget(
+                                label: 'LATER',
+                                tasks: later,
+                                cardId: widget.card.id,
+                                column: 'later',
+                                isHidden: _isHiddenOrSnoozed,
+                              ),
                             ),
-                          ),
-                        ),
-                        Expanded(
-                          child: CardColumnWidget(
-                            label: 'LATER',
-                            tasks: later,
-                            cardId: widget.card.id,
-                            column: 'later',
-                            isHidden: _isHiddenOrSnoozed,
-                          ),
+                          ],
                         ),
                       ],
+                    ),
+                    // ── Add task bar at card bottom ──────────────────────
+                    _AddTaskBar(
+                      cardId: widget.card.id,
+                      isHidden: _isHiddenOrSnoozed || _isArchived,
                     ),
                   ],
                 );
@@ -346,6 +359,7 @@ class _CardHeader extends StatefulWidget {
     required this.onTap,
     required this.onRightClick,
     required this.onTitleSaved,
+    required this.onDateSaved,
     this.stackName,
   });
 
@@ -358,6 +372,7 @@ class _CardHeader extends StatefulWidget {
   final VoidCallback onTap;
   final void Function(Offset) onRightClick;
   final void Function(String?) onTitleSaved;
+  final void Function(DateTime) onDateSaved;
 
   @override
   State<_CardHeader> createState() => _CardHeaderState();
@@ -402,6 +417,24 @@ class _CardHeaderState extends State<_CardHeader> {
         .addPostFrameCallback((_) => _titleFocus.requestFocus());
   }
 
+  Future<void> _editDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: widget.card.date,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2035),
+      builder: (ctx, child) => Theme(
+        data: Theme.of(ctx).copyWith(
+          colorScheme: Theme.of(ctx)
+              .colorScheme
+              .copyWith(primary: AppColors.accent),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked != null && mounted) widget.onDateSaved(picked);
+  }
+
   void _onFocusChange() {
     if (!_titleFocus.hasFocus && _editingTitle) _saveTitle();
   }
@@ -444,7 +477,6 @@ class _CardHeaderState extends State<_CardHeader> {
       child: GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: widget.onTap,
-      onDoubleTap: _startEdit,
       child: ColoredBox(
         color: headerBg,
         child: Column(
@@ -475,18 +507,21 @@ class _CardHeaderState extends State<_CardHeader> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Date (not editable)
-                          Text(
-                            _dateFmt.format(card.date),
-                            style: GoogleFonts.caveat(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textSecondary,
-                              height: 1.1,
+                          // Date — double-click to change
+                          GestureDetector(
+                            onDoubleTap: _editDate,
+                            child: Text(
+                              _dateFmt.format(card.date),
+                              style: GoogleFonts.caveat(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textSecondary,
+                                height: 1.1,
+                              ),
                             ),
                           ),
                           const SizedBox(height: 2),
-                          // Project title — inline edit on double-tap
+                          // Project title — double-click to edit
                           if (_editingTitle)
                             CallbackShortcuts(
                               bindings: {
@@ -520,21 +555,28 @@ class _CardHeaderState extends State<_CardHeader> {
                               ),
                             )
                           else if (card.projectTitle != null)
-                            Text(
-                              card.projectTitle!,
-                              style: Theme.of(context).textTheme.titleSmall,
-                              overflow: TextOverflow.ellipsis,
+                            GestureDetector(
+                              onDoubleTap: _startEdit,
+                              child: Text(
+                                card.projectTitle!,
+                                style:
+                                    Theme.of(context).textTheme.titleSmall,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             )
                           else
-                            Text(
-                              'Double-click to add title',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(
-                                    color: AppColors.textDisabled,
-                                    fontStyle: FontStyle.italic,
-                                  ),
+                            GestureDetector(
+                              onDoubleTap: _startEdit,
+                              child: Text(
+                                'Double-click to add title',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      color: AppColors.textDisabled,
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                              ),
                             ),
                         ],
                       ),
@@ -655,11 +697,211 @@ class _StatusBadge extends StatelessWidget {
 
 // ── Ruled-paper background painter ───────────────────────────────────────────
 
+// ── Add task bar (card bottom) ────────────────────────────────────────────────
+
+class _AddTaskBar extends ConsumerStatefulWidget {
+  const _AddTaskBar({required this.cardId, required this.isHidden});
+  final String cardId;
+  final bool isHidden;
+
+  @override
+  ConsumerState<_AddTaskBar> createState() => _AddTaskBarState();
+}
+
+class _AddTaskBarState extends ConsumerState<_AddTaskBar> {
+  bool _hovered = false;
+  bool _adding = false;
+  String? _activeColumn; // 'now' | 'later'
+  final _ctrl = TextEditingController();
+  final _focus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _focus.addListener(() {
+      if (!_focus.hasFocus && _adding) _cancel();
+    });
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  void _start(String col) {
+    setState(() {
+      _adding = true;
+      _activeColumn = col;
+    });
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _focus.requestFocus());
+  }
+
+  void _cancel() {
+    setState(() {
+      _adding = false;
+      _ctrl.clear();
+    });
+  }
+
+  Future<void> _submit() async {
+    final text = _ctrl.text.trim();
+    if (text.isEmpty) { _cancel(); return; }
+    _ctrl.clear();
+    setState(() => _adding = false);
+    await ref.read(taskRepositoryProvider).create(
+          cardId: widget.cardId,
+          title: text,
+          column: _activeColumn ?? 'now',
+        );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_adding) {
+      return Container(
+        height: 26,
+        decoration: const BoxDecoration(
+          border: Border(
+              top: BorderSide(color: AppColors.divider, width: 0.5)),
+          color: AppColors.accentLight,
+        ),
+        padding:
+            const EdgeInsets.symmetric(horizontal: AppSpacing.cardPadding),
+        child: Row(
+          children: [
+            Icon(Icons.add, size: 12, color: AppColors.accent),
+            const SizedBox(width: 6),
+            Expanded(
+              child: CallbackShortcuts(
+                bindings: {
+                  const SingleActivator(LogicalKeyboardKey.enter): _submit,
+                  const SingleActivator(LogicalKeyboardKey.escape): _cancel,
+                },
+                child: TextField(
+                  controller: _ctrl,
+                  focusNode: _focus,
+                  style: const TextStyle(
+                      fontSize: 12, color: AppColors.textPrimary),
+                  decoration: InputDecoration(
+                    hintText: 'Task title… (${_activeColumn?.toUpperCase()})',
+                    hintStyle: const TextStyle(
+                        fontSize: 12, color: AppColors.textDisabled),
+                    isDense: true,
+                    contentPadding: EdgeInsets.zero,
+                    border: InputBorder.none,
+                  ),
+                ),
+              ),
+            ),
+            GestureDetector(
+              onTap: _cancel,
+              child: const Icon(Icons.close,
+                  size: 13, color: AppColors.textTertiary),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        height: 26,
+        decoration: BoxDecoration(
+          color: widget.isHidden
+              ? Colors.transparent
+              : _hovered
+                  ? AppColors.accentLight
+                  : AppColors.accent.withValues(alpha: 0.05),
+          border: const Border(
+              top: BorderSide(color: AppColors.divider, width: 0.5)),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: GestureDetector(
+                onTap: () => _start('now'),
+                child: Container(
+                  alignment: Alignment.center,
+                  decoration: const BoxDecoration(
+                    border: Border(
+                        right: BorderSide(
+                            color: AppColors.divider, width: 0.5)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.add,
+                          size: 12,
+                          color: _hovered
+                              ? AppColors.accent
+                              : AppColors.textTertiary),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Now',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: _hovered
+                              ? AppColors.accent
+                              : AppColors.textTertiary,
+                          fontWeight: _hovered
+                              ? FontWeight.w600
+                              : FontWeight.normal,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Expanded(
+              child: GestureDetector(
+                onTap: () => _start('later'),
+                child: Container(
+                  alignment: Alignment.center,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.add,
+                          size: 12,
+                          color: _hovered
+                              ? AppColors.accent
+                              : AppColors.textTertiary),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Later',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: _hovered
+                              ? AppColors.accent
+                              : AppColors.textTertiary,
+                          fontWeight: _hovered
+                              ? FontWeight.w600
+                              : FontWeight.normal,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _RuledLines extends CustomPainter {
   const _RuledLines({required this.color});
   final Color color;
 
-  static const double _spacing = 22.0;
+  static const double _spacing = 26.0;
 
   @override
   void paint(Canvas canvas, Size size) {

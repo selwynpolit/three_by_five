@@ -32,30 +32,33 @@ class _CardColumnWidgetState extends ConsumerState<CardColumnWidget> {
   // Index before which the drop indicator is shown. null = no active drag.
   int? _dropIndex;
 
-  void _reorder(String draggedId, int insertBefore) {
+  Future<void> _reorder(String draggedId, int insertBefore) async {
+    setState(() => _dropIndex = null);
     final tasks = widget.tasks;
     final from = tasks.indexWhere((t) => t.id == draggedId);
 
     if (from == -1) {
-      // Cross-column or cross-card move. Always set the target cardId and
-      // column so tasks can be dragged between both columns and cards.
-      ref.read(taskRepositoryProvider).update(
+      // Cross-column or cross-card move: preserve insertion position.
+      // Build the new order with the dragged task inserted at insertBefore.
+      final ids = tasks.map((t) => t.id).toList();
+      ids.insert(insertBefore.clamp(0, ids.length), draggedId);
+      await ref.read(taskRepositoryProvider).update(
             id: draggedId,
             cardId: widget.cardId,
             column: widget.column,
           );
-      setState(() => _dropIndex = null);
+      await ref.read(taskRepositoryProvider).reorder(ids);
       return;
     }
 
     var to = insertBefore;
     if (to > from) to -= 1;
-    if (from == to) { setState(() => _dropIndex = null); return; }
+    if (from == to) return;
 
     final reordered = List<AppTask>.from(tasks);
     final item = reordered.removeAt(from);
     reordered.insert(to, item);
-    ref
+    await ref
         .read(taskRepositoryProvider)
         .reorder(reordered.map((t) => t.id).toList());
   }
@@ -69,7 +72,7 @@ class _CardColumnWidgetState extends ConsumerState<CardColumnWidget> {
         left: AppSpacing.cardPadding,
         right: AppSpacing.cardPadding,
         top: 0,
-        bottom: AppSpacing.sm,
+        bottom: 0,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -87,84 +90,81 @@ class _CardColumnWidgetState extends ConsumerState<CardColumnWidget> {
             ),
           ),
 
-          // ── Task list ─────────────────────────────────────────────
-          if (tasks.isEmpty)
-            // Empty column — whole area is a drop target so cross-column
-            // drags can land here.
-            DragTarget<String>(
-              builder: (_, candidates, rejected) => AnimatedContainer(
-                duration: const Duration(milliseconds: 80),
-                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-                decoration: BoxDecoration(
-                  color: candidates.isNotEmpty
-                      ? AppColors.accent.withValues(alpha: 0.07)
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  candidates.isNotEmpty ? 'Drop here' : 'Nothing here',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+          // ── Task list (min height = 5 task cells) ─────────────────
+          ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 5 * 26.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (tasks.isEmpty)
+                  // Empty column — whole area is a drop target.
+                  DragTarget<String>(
+                    builder: (_, candidates, rejected) => AnimatedContainer(
+                      duration: const Duration(milliseconds: 80),
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 8, horizontal: 4),
+                      decoration: BoxDecoration(
                         color: candidates.isNotEmpty
-                            ? AppColors.accent
-                            : AppColors.textDisabled,
-                        fontStyle: candidates.isNotEmpty
-                            ? FontStyle.normal
-                            : FontStyle.italic,
+                            ? AppColors.accent.withValues(alpha: 0.07)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(4),
                       ),
-                ),
-              ),
-              onWillAcceptWithDetails: (_) {
-                setState(() => _dropIndex = 0);
-                return true;
-              },
-              onLeave: (_) => setState(() => _dropIndex = null),
-              onAcceptWithDetails: (d) {
-                _reorder(d.data, 0);
-                setState(() => _dropIndex = null);
-              },
-            )
-          else ...[
-            for (var i = 0; i < tasks.length; i++) ...[
-              _DropZone(
-                active: _dropIndex == i,
-                onWillAccept: (id) {
-                  setState(() => _dropIndex = i);
-                  return true;
-                },
-                onLeave: (_) {
-                  if (_dropIndex == i) setState(() => _dropIndex = null);
-                },
-                onAccept: (id) {
-                  _reorder(id, i);
-                  setState(() => _dropIndex = null);
-                },
-              ),
-              _DragRow(
-                key: ValueKey(tasks[i].id),
-                task: tasks[i],
-                isHidden: widget.isHidden,
-              ),
-            ],
-            // Final drop zone — append to end.
-            _DropZone(
-              active: _dropIndex == tasks.length,
-              onWillAccept: (id) {
-                setState(() => _dropIndex = tasks.length);
-                return true;
-              },
-              onLeave: (_) {
-                if (_dropIndex == tasks.length) setState(() => _dropIndex = null);
-              },
-              onAccept: (id) {
-                _reorder(id, tasks.length);
-                setState(() => _dropIndex = null);
-              },
+                      child: Text(
+                        candidates.isNotEmpty ? 'Drop here' : '',
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(
+                              color: AppColors.accent,
+                            ),
+                      ),
+                    ),
+                    onWillAcceptWithDetails: (_) {
+                      setState(() => _dropIndex = 0);
+                      return true;
+                    },
+                    onLeave: (_) => setState(() => _dropIndex = null),
+                    onAcceptWithDetails: (d) {
+                      _reorder(d.data, 0);
+                    },
+                  )
+                else ...[
+                  for (var i = 0; i < tasks.length; i++) ...[
+                    _DropZone(
+                      active: _dropIndex == i,
+                      onWillAccept: (id) {
+                        setState(() => _dropIndex = i);
+                        return true;
+                      },
+                      onLeave: (_) {
+                        if (_dropIndex == i) setState(() => _dropIndex = null);
+                      },
+                      onAccept: (id) => _reorder(id, i),
+                    ),
+                    _DragRow(
+                      key: ValueKey(tasks[i].id),
+                      task: tasks[i],
+                      isHidden: widget.isHidden,
+                    ),
+                  ],
+                  // Final drop zone — append to end.
+                  _DropZone(
+                    active: _dropIndex == tasks.length,
+                    onWillAccept: (id) {
+                      setState(() => _dropIndex = tasks.length);
+                      return true;
+                    },
+                    onLeave: (_) {
+                      if (_dropIndex == tasks.length) {
+                        setState(() => _dropIndex = null);
+                      }
+                    },
+                    onAccept: (id) => _reorder(id, tasks.length),
+                  ),
+                ],
+              ],
             ),
-          ],
-
-          // ── Add task ──────────────────────────────────────────────
-          const SizedBox(height: 4),
-          _AddTaskButton(cardId: widget.cardId, column: widget.column),
+          ),
         ],
       ),
     );
@@ -190,18 +190,22 @@ class _DropZone extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DragTarget<String>(
-      builder: (_, candidates, rejected) => SizedBox(
-        height: 4,
-        child: Center(
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 80),
-            height: active ? 2 : 0,
-            decoration: BoxDecoration(
-              color: AppColors.accent,
-              borderRadius: BorderRadius.circular(1),
-            ),
-          ),
-        ),
+      builder: (_, candidates, rejected) => AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        height: active ? 22 : 4,
+        margin: active
+            ? const EdgeInsets.symmetric(vertical: 2)
+            : EdgeInsets.zero,
+        decoration: active
+            ? BoxDecoration(
+                color: AppColors.accent.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(
+                  color: AppColors.accent.withValues(alpha: 0.35),
+                  width: 1,
+                ),
+              )
+            : const BoxDecoration(),
       ),
       onWillAcceptWithDetails: (d) => onWillAccept(d.data),
       onLeave: onLeave,
