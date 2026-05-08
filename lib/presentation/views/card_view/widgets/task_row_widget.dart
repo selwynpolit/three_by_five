@@ -136,8 +136,13 @@ class _TaskRowWidgetState extends ConsumerState<TaskRowWidget>
         ? Color(coloredTag.color!)
         : null;
 
-    return SizedBox(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
       height: 22,
+      // Subtle tag-color tint on the full row for visibility.
+      color: tagColor != null && !task.isCompleted
+          ? tagColor.withValues(alpha: 0.10)
+          : Colors.transparent,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

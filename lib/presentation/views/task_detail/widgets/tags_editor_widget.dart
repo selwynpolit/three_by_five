@@ -80,81 +80,81 @@ class _TagsEditorWidgetState extends ConsumerState<TagsEditorWidget> {
                     .updateTagColor(tag.id, newColor?.toARGB32()),
               ),
 
-            // Add input
-            if (_editing)
-              SizedBox(
-                width: 120,
-                height: 26,
-                child: KeyboardListener(
-                  focusNode: FocusNode(),
-                  onKeyEvent: (event) {
-                    if (event is KeyDownEvent) {
-                      if (event.logicalKey == LogicalKeyboardKey.enter ||
-                          event.logicalKey == LogicalKeyboardKey.comma) {
-                        _addTag(_controller.text);
-                        setState(() => _editing = false);
-                      } else if (event.logicalKey ==
-                          LogicalKeyboardKey.escape) {
-                        setState(() {
-                          _editing = false;
-                          _controller.clear();
-                          _pendingTagColor = null;
-                        });
+            // Add/edit input — only shown when no tag yet (1 tag max per task).
+            if (tags.isEmpty)
+              if (_editing)
+                SizedBox(
+                  width: 120,
+                  height: 26,
+                  child: KeyboardListener(
+                    focusNode: FocusNode(),
+                    onKeyEvent: (event) {
+                      if (event is KeyDownEvent) {
+                        if (event.logicalKey == LogicalKeyboardKey.enter ||
+                            event.logicalKey == LogicalKeyboardKey.comma) {
+                          _addTag(_controller.text);
+                          setState(() => _editing = false);
+                        } else if (event.logicalKey ==
+                            LogicalKeyboardKey.escape) {
+                          setState(() {
+                            _editing = false;
+                            _controller.clear();
+                            _pendingTagColor = null;
+                          });
+                        }
                       }
-                    }
-                  },
-                  child: TextField(
-                    controller: _controller,
-                    focusNode: _focus,
-                    autofocus: true,
-                    onSubmitted: (v) {
-                      _addTag(v);
-                      setState(() => _editing = false);
                     },
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(color: AppColors.textPrimary),
-                    decoration: InputDecoration(
-                      hintText: 'tag name',
-                      hintStyle: Theme.of(context)
+                    child: TextField(
+                      controller: _controller,
+                      focusNode: _focus,
+                      autofocus: true,
+                      onSubmitted: (v) {
+                        _addTag(v);
+                        setState(() => _editing = false);
+                      },
+                      style: Theme.of(context)
                           .textTheme
                           .bodySmall
-                          ?.copyWith(color: AppColors.textDisabled),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(6),
-                        borderSide: const BorderSide(
-                            color: AppColors.accent, width: 1),
+                          ?.copyWith(color: AppColors.textPrimary),
+                      decoration: InputDecoration(
+                        hintText: 'tag name',
+                        hintStyle: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(color: AppColors.textDisabled),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(6),
+                          borderSide: const BorderSide(
+                              color: AppColors.accent, width: 1),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(6),
+                          borderSide: const BorderSide(
+                              color: AppColors.cardBorder, width: 0.5),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(6),
+                          borderSide: const BorderSide(
+                              color: AppColors.accent, width: 1),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        isDense: true,
+                        filled: true,
+                        fillColor: AppColors.canvas,
                       ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(6),
-                        borderSide: const BorderSide(
-                            color: AppColors.cardBorder, width: 0.5),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(6),
-                        borderSide: const BorderSide(
-                            color: AppColors.accent, width: 1),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
-                      isDense: true,
-                      filled: true,
-                      fillColor: AppColors.canvas,
                     ),
                   ),
+                )
+              else
+                _AddTagButton(
+                  onTap: () => setState(() => _editing = true),
                 ),
-              )
-            else
-              // "Add tag" button
-              _AddTagButton(
-                onTap: () => setState(() => _editing = true),
-              ),
           ],
         ),
 
-        // Color picker row shown when editing a new tag
-        if (_editing) ...[
+        // Color picker row shown when editing a new tag (only when no tag yet)
+        if (_editing && tags.isEmpty) ...[
           const SizedBox(height: 6),
           Row(
             mainAxisSize: MainAxisSize.min,

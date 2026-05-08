@@ -732,6 +732,7 @@ class _AddTaskBar extends ConsumerStatefulWidget {
 class _AddTaskBarState extends ConsumerState<_AddTaskBar> {
   bool _hovered = false;
   bool _adding = false;
+  bool _submitting = false; // guard so focus-lost doesn't cancel mid-submit
   String? _activeColumn; // 'now' | 'later'
   final _ctrl = TextEditingController();
   final _focus = FocusNode();
@@ -740,7 +741,7 @@ class _AddTaskBarState extends ConsumerState<_AddTaskBar> {
   void initState() {
     super.initState();
     _focus.addListener(() {
-      if (!_focus.hasFocus && _adding) _cancel();
+      if (!_focus.hasFocus && _adding && !_submitting) _cancel();
     });
   }
 
@@ -771,12 +772,18 @@ class _AddTaskBarState extends ConsumerState<_AddTaskBar> {
     final text = _ctrl.text.trim();
     if (text.isEmpty) { _cancel(); return; }
     _ctrl.clear();
-    setState(() => _adding = false);
+    // Keep the bar open for rapid entry — refocus after the DB write.
+    _submitting = true;
     await ref.read(taskRepositoryProvider).create(
           cardId: widget.cardId,
           title: text,
           column: _activeColumn ?? 'now',
         );
+    _submitting = false;
+    if (mounted) {
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) { if (mounted) _focus.requestFocus(); });
+    }
   }
 
   @override
