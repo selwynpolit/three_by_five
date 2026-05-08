@@ -33,8 +33,14 @@ class CardColumnWidget extends ConsumerStatefulWidget {
 }
 
 class _CardColumnWidgetState extends ConsumerState<CardColumnWidget> {
-  // Index before which the drop indicator is shown. null = no active drag.
   int? _dropIndex;
+  final _scrollCtrl = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
 
   Future<void> _reorder(String draggedId, int insertBefore) async {
     setState(() => _dropIndex = null);
@@ -110,14 +116,15 @@ class _CardColumnWidgetState extends ConsumerState<CardColumnWidget> {
             ),
           ),
 
-          // ── Task list (fixed height = 5 task cells) ───────────────
-          ClipRect(
-            child: ConstrainedBox(
-            constraints: const BoxConstraints(
-              minHeight: 5 * 26.0,
-              maxHeight: 5 * 26.0 + 8.0, // room for the final drop zone
-            ),
-            child: Column(
+          // ── Task list — fixed 6-slot height, scrollable for overflow ──
+          SizedBox(
+            height: 6 * 26.0, // 156 px = 6 task cells (4 drop + 22 row each)
+            child: Scrollbar(
+              controller: _scrollCtrl,
+              thumbVisibility: false,
+              child: SingleChildScrollView(
+                controller: _scrollCtrl,
+                child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (tasks.isEmpty)
@@ -187,12 +194,13 @@ class _CardColumnWidgetState extends ConsumerState<CardColumnWidget> {
                   ),
                 ],
               ],
-            ),
-            ), // ConstrainedBox
-          ), // ClipRect
+            ),          // Column
+            ),          // SingleChildScrollView
+          ),            // Scrollbar
+        ),              // SizedBox
         ],
       ),
-        ), // Padding (top layer)
+        ),              // Padding (top layer)
       ],
     ); // Stack
   }

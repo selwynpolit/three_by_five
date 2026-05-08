@@ -167,11 +167,9 @@ class _ShellReadyState extends ConsumerState<_ShellReady> {
               () => switchView(AppView.todayView),
           const SingleActivator(LogicalKeyboardKey.digit5, meta: true):
               () => switchView(AppView.archiveView),
-          const SingleActivator(LogicalKeyboardKey.escape): () {
-            if (ref.read(selectedTaskIdProvider) != null) {
-              ref.read(selectedTaskIdProvider.notifier).select(null);
-            }
-          },
+          // ESC is handled exclusively by HardwareKeyboard.addHandler in
+          // app_shell + task_detail_panel — removing it from CallbackShortcuts
+          // prevents it from bypassing the panel's save-dialog interception.
         },
         child: Focus(
           autofocus: true,

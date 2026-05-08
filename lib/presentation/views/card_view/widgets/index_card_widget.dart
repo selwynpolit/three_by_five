@@ -11,6 +11,7 @@ import '../../../../data/database/app_database.dart';
 import '../../../../domain/undo/undo_action.dart';
 import '../../../providers/canvas_providers.dart';
 import '../../../providers/card_providers.dart';
+import '../../../providers/stack_providers.dart';
 import '../../../providers/task_providers.dart';
 import '../../../providers/ui_state_providers.dart';
 import '../../kanban_view/kanban_view.dart' show showCardKanbanDialog;
@@ -84,6 +85,9 @@ class _IndexCardWidgetState extends ConsumerState<IndexCardWidget> {
               value: 'kanban', child: Text('Kanban view…')),
           const PopupMenuDivider(),
           const PopupMenuItem(
+              value: 'move_stack', child: Text('Move to stack…')),
+          const PopupMenuDivider(),
+          const PopupMenuItem(
               value: 'del_completed',
               child: Text('Delete completed tasks')),
           const PopupMenuDivider(),
@@ -111,6 +115,8 @@ class _IndexCardWidgetState extends ConsumerState<IndexCardWidget> {
         await _showSnoozeMenu(context, globalPos, card.id);
       case 'kanban':
         if (context.mounted) await showCardKanbanDialog(context, card);
+      case 'move_stack':
+        if (context.mounted) await _showMoveToStackMenu(context, globalPos, card.id);
       case 'del_completed':
         await ref.read(taskRepositoryProvider).deleteCompletedForCard(card.id);
       case 'archive':
@@ -181,6 +187,39 @@ class _IndexCardWidgetState extends ConsumerState<IndexCardWidget> {
       ref
           .read(lastUndoActionProvider.notifier)
           .record(CardSnoozed(cardId: cardId));
+    }
+  }
+
+  Future<void> _showMoveToStackMenu(
+      BuildContext context, Offset pos, String cardId) async {
+    final stacks = ref.read(stacksProvider).valueOrNull ?? [];
+    if (stacks.isEmpty) return;
+    final result = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+          pos.dx + 12, pos.dy + 40, pos.dx + 13, pos.dy + 41),
+      items: stacks
+          .map((s) => PopupMenuItem(
+                value: s.id,
+                child: Row(
+                  children: [
+                    Container(
+                      width: 10,
+                      height: 10,
+                      margin: const EdgeInsets.only(right: 8),
+                      decoration: BoxDecoration(
+                        color: Color(s.color),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    Text(s.name),
+                  ],
+                ),
+              ))
+          .toList(),
+    );
+    if (result != null && result != widget.card.stackId) {
+      await ref.read(cardRepositoryProvider).moveToStack(cardId, result);
     }
   }
 
@@ -285,8 +324,8 @@ class _IndexCardWidgetState extends ConsumerState<IndexCardWidget> {
                     .where((t) =>
                         t.columnName == 'later' && t.deletedAt == null)
                     .toList();
-                final nowFull = now.length >= 5;
-                final laterFull = later.length >= 5;
+                final nowFull = now.length >= 6;
+                final laterFull = later.length >= 6;
 
                 return Column(
                   mainAxisSize: MainAxisSize.min,

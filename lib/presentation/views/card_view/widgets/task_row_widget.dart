@@ -122,27 +122,25 @@ class _TaskRowWidgetState extends ConsumerState<TaskRowWidget>
   }
 
   Widget _buildRow(BuildContext context, AppTask task) {
-    // Watch tags to find a color for the title.
+    // Watch tags for the underline color.
     final tagsAsync = ref.watch(tagsForTaskProvider(task.id));
     final tags = tagsAsync.valueOrNull ?? [];
     AppTag? coloredTag;
     for (final t in tags) {
-      if (t.color != null) {
-        coloredTag = t;
-        break;
-      }
+      if (t.color != null) { coloredTag = t; break; }
     }
     final tagColor = (!task.isCompleted && coloredTag != null)
         ? Color(coloredTag.color!)
         : null;
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
+    // Bold when task has notes or attachments.
+    final notesAsync = ref.watch(notesForTaskProvider(task.id));
+    final attachmentsAsync = ref.watch(attachmentsForTaskProvider(task.id));
+    final hasRichContent = (notesAsync.valueOrNull?.isNotEmpty ?? false) ||
+        (attachmentsAsync.valueOrNull?.isNotEmpty ?? false);
+
+    return SizedBox(
       height: 22,
-      // Subtle tag-color tint on the full row for visibility.
-      color: tagColor != null && !task.isCompleted
-          ? tagColor.withValues(alpha: 0.10)
-          : Colors.transparent,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -199,15 +197,23 @@ class _TaskRowWidgetState extends ConsumerState<TaskRowWidget>
               task.title,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     fontSize: 13,
+                    fontWeight: hasRichContent && !task.isCompleted
+                        ? FontWeight.w700
+                        : FontWeight.w500,
                     color: widget.isHidden
                         ? AppColors.textDisabled
                         : task.isCompleted
                             ? AppColors.textCompleted
-                            : tagColor ?? AppColors.textPrimary,
+                            : AppColors.textPrimary,
+                    // Completed → strikethrough. Tagged → colored underline.
                     decoration: task.isCompleted
                         ? TextDecoration.lineThrough
-                        : null,
-                    decorationColor: AppColors.textCompleted,
+                        : tagColor != null
+                            ? TextDecoration.underline
+                            : null,
+                    decorationColor:
+                        task.isCompleted ? AppColors.textCompleted : tagColor,
+                    decorationThickness: 2.2,
                   ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
