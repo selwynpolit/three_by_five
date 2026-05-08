@@ -16,6 +16,8 @@ class CardColumnWidget extends ConsumerStatefulWidget {
     required this.cardId,
     required this.column,
     this.isHidden = false,
+    this.onEmptyTap,
+    this.onEmptySecondaryTap,
   });
 
   final String label;
@@ -23,6 +25,8 @@ class CardColumnWidget extends ConsumerStatefulWidget {
   final String cardId;
   final String column;
   final bool isHidden;
+  final VoidCallback? onEmptyTap;
+  final void Function(Offset)? onEmptySecondaryTap;
 
   @override
   ConsumerState<CardColumnWidget> createState() => _CardColumnWidgetState();
@@ -67,7 +71,23 @@ class _CardColumnWidgetState extends ConsumerState<CardColumnWidget> {
   Widget build(BuildContext context) {
     final tasks = widget.tasks;
 
-    return Padding(
+    return Stack(
+      children: [
+        // Underlayer: catches taps/right-clicks on empty space in the column.
+        // Task rows (rendered above in the Column) absorb their own taps,
+        // so only truly empty areas reach this detector.
+        if (widget.onEmptyTap != null || widget.onEmptySecondaryTap != null)
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: widget.onEmptyTap,
+              onSecondaryTapDown: widget.onEmptySecondaryTap != null
+                  ? (d) => widget.onEmptySecondaryTap!(d.globalPosition)
+                  : null,
+            ),
+          ),
+        // Top layer: actual column content.
+        Padding(
       padding: const EdgeInsets.only(
         left: AppSpacing.cardPadding,
         right: AppSpacing.cardPadding,
@@ -78,11 +98,11 @@ class _CardColumnWidgetState extends ConsumerState<CardColumnWidget> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // ── Column label ──────────────────────────────────────────
+          // ── Column label (centered) ───────────────────────────────
           SizedBox(
             height: AppSpacing.columnHeaderHeight,
             child: Align(
-              alignment: Alignment.centerLeft,
+              alignment: Alignment.center,
               child: Text(
                 widget.label,
                 style: Theme.of(context).textTheme.labelMedium,
@@ -167,7 +187,9 @@ class _CardColumnWidgetState extends ConsumerState<CardColumnWidget> {
           ),
         ],
       ),
-    );
+        ), // Padding (top layer)
+      ],
+    ); // Stack
   }
 }
 

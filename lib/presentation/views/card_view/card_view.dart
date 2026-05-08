@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:intl/intl.dart' as intl;
 
 import 'package:flutter/material.dart';
@@ -7,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_shadows.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../data/database/app_database.dart';
 import '../../../domain/undo/undo_action.dart';
@@ -311,41 +310,88 @@ class _GridView extends StatelessWidget {
 // ── Scattered layout ──────────────────────────────────────────────────────────
 
 class _ScatteredView extends StatelessWidget {
-  const _ScatteredView({required this.cards, required this.stackMap, required this.showStackPill});
+  const _ScatteredView(
+      {required this.cards,
+      required this.stackMap,
+      required this.showStackPill});
   final List<AppCard> cards;
   final Map<String, AppStack> stackMap;
   final bool showStackPill;
 
-  // Deterministic rotation (-3.5° … +3.5°) derived from card ID hash.
-  double _angle(String id) =>
-      ((id.hashCode % 700) - 350) / 100.0 * (math.pi / 180);
+  @override
+  Widget build(BuildContext context) {
+    // Sort newest first so the most recent card appears visually "on top."
+    final sorted = [...cards]
+      ..sort((a, b) => b.date.compareTo(a.date));
 
-  // 0–19 px top offset for staggered vertical placement.
-  double _yOff(String id) => ((id.hashCode >> 8) % 20).toDouble();
+    return Scrollbar(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(AppSpacing.viewPadding, 24,
+            AppSpacing.viewPadding + 14, 32),
+        child: Wrap(
+          spacing: 44,
+          runSpacing: 40,
+          children: sorted.map((c) => _StackedCard(
+                card: c,
+                stackColor: _stackColor(c, stackMap),
+                stackName: showStackPill ? stackMap[c.stackId]?.name : null,
+              )).toList(),
+        ),
+      ),
+    );
+  }
+}
+
+/// Shows a card with two "peek" shadows behind it suggesting a physical stack.
+class _StackedCard extends StatelessWidget {
+  const _StackedCard(
+      {required this.card,
+      required this.stackColor,
+      required this.stackName});
+
+  final AppCard card;
+  final Color stackColor;
+  final String? stackName;
 
   @override
   Widget build(BuildContext context) {
-    return Scrollbar(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(AppSpacing.viewPadding + 12, 4,
-            AppSpacing.viewPadding + 12, AppSpacing.viewPadding + 12),
-        child: Wrap(
-          spacing: 40,
-          runSpacing: 44,
-          children: cards.map((c) {
-            return Padding(
-              padding: EdgeInsets.only(top: _yOff(c.id)),
-              child: Transform.rotate(
-                angle: _angle(c.id),
-                child: IndexCardWidget(
-                  card: c,
-                  stackColor: _stackColor(c, stackMap),
-                  stackName: showStackPill ? stackMap[c.stackId]?.name : null,
-                ),
-              ),
-            );
-          }).toList(),
-        ),
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        boxShadow: [
+          // Deepest card in the stack (furthest behind, painted first)
+          BoxShadow(
+            color: const Color(0xFFF0ECE2),
+            offset: const Offset(10, 7),
+            blurRadius: 0,
+            spreadRadius: 0,
+          ),
+          BoxShadow(
+            color: AppColors.cardBorder.withValues(alpha: 0.55),
+            offset: const Offset(10, 7),
+            blurRadius: 0,
+            spreadRadius: 0.6,
+          ),
+          // Middle card
+          BoxShadow(
+            color: AppColors.cardSurface,
+            offset: const Offset(5, 4),
+            blurRadius: 0,
+            spreadRadius: 0,
+          ),
+          BoxShadow(
+            color: AppColors.cardBorder.withValues(alpha: 0.75),
+            offset: const Offset(5, 4),
+            blurRadius: 0,
+            spreadRadius: 0.6,
+          ),
+          // Real drop shadow (painted last = closest to foreground)
+          ...AppShadows.card,
+        ],
+      ),
+      child: IndexCardWidget(
+        card: card,
+        stackColor: stackColor,
+        stackName: stackName,
       ),
     );
   }

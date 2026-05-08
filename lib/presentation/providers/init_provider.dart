@@ -40,6 +40,8 @@ Future<String?> appInit(AppInitRef ref) async {
 
   // Apply both state values via microtask — avoids mutating providers
   // during a widget build phase (which Riverpod forbids).
+  final layoutStr = await settingsDao.get('cardLayoutMode');
+
   Future.microtask(() {
     ref.read(activeStackIdProvider.notifier).set(stackId);
 
@@ -50,6 +52,18 @@ Future<String?> appInit(AppInitRef ref) async {
           ref.read(hiddenStackIdsProvider.notifier).hideAll(ids);
         }
       } catch (_) {}
+    }
+
+    // Restore card layout (skip taskList — that's within-session state).
+    if (layoutStr != null) {
+      final idx = int.tryParse(layoutStr);
+      if (idx != null && idx < CardLayoutMode.values.length) {
+        final mode = CardLayoutMode.values[idx];
+        if (mode != CardLayoutMode.taskList) {
+          ref.read(lastCardLayoutModeProvider.notifier).state = mode;
+          ref.read(cardLayoutModeProvider.notifier).state = mode;
+        }
+      }
     }
   });
 

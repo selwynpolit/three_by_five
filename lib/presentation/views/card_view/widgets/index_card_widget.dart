@@ -35,6 +35,16 @@ class IndexCardWidget extends ConsumerStatefulWidget {
 
 class _IndexCardWidgetState extends ConsumerState<IndexCardWidget> {
   bool _hovered = false;
+  final _addBarKey = GlobalKey<_AddTaskBarState>();
+
+  void _handleEmptyTap(String col) {
+    // If detail pane is open, close it; otherwise start adding a task.
+    if (ref.read(selectedTaskIdProvider) != null) {
+      ref.read(selectedTaskIdProvider.notifier).select(null);
+    } else {
+      _addBarKey.currentState?._start(col);
+    }
+  }
 
   bool get _isArchived => widget.card.status == 'archived';
 
@@ -310,6 +320,9 @@ class _IndexCardWidgetState extends ConsumerState<IndexCardWidget> {
                                   cardId: widget.card.id,
                                   column: 'now',
                                   isHidden: _isHiddenOrSnoozed,
+                                  onEmptyTap: () => _handleEmptyTap('now'),
+                                  onEmptySecondaryTap: (pos) =>
+                                      _showCardMenu(context, pos),
                                 ),
                               ),
                             ),
@@ -320,6 +333,9 @@ class _IndexCardWidgetState extends ConsumerState<IndexCardWidget> {
                                 cardId: widget.card.id,
                                 column: 'later',
                                 isHidden: _isHiddenOrSnoozed,
+                                onEmptyTap: () => _handleEmptyTap('later'),
+                                onEmptySecondaryTap: (pos) =>
+                                    _showCardMenu(context, pos),
                               ),
                             ),
                           ],
@@ -328,6 +344,7 @@ class _IndexCardWidgetState extends ConsumerState<IndexCardWidget> {
                     ),
                     // ── Add task bar at card bottom ──────────────────────
                     _AddTaskBar(
+                      key: _addBarKey,
                       cardId: widget.card.id,
                       isHidden: _isHiddenOrSnoozed || _isArchived,
                     ),
@@ -383,7 +400,7 @@ class _CardHeaderState extends State<_CardHeader> {
   late final TextEditingController _titleCtrl;
   final _titleFocus = FocusNode();
 
-  static final _dateFmt = DateFormat('EEE d MMM');
+  static final _dateFmt = DateFormat('EEE d MMM yyyy');
   static final _snoozeFmt = DateFormat('d MMM');
 
   @override
@@ -597,7 +614,11 @@ class _CardHeaderState extends State<_CardHeader> {
                             ),
                           if (widget.hasKanbanTasks) ...[
                             if (isExpanded) const SizedBox(height: 4),
-                            const _KanbanBadge(),
+                            GestureDetector(
+                              onTap: () => showCardKanbanDialog(
+                                  context, widget.card),
+                              child: const _KanbanBadge(),
+                            ),
                           ],
                         ],
                       ),
@@ -700,7 +721,7 @@ class _StatusBadge extends StatelessWidget {
 // ── Add task bar (card bottom) ────────────────────────────────────────────────
 
 class _AddTaskBar extends ConsumerStatefulWidget {
-  const _AddTaskBar({required this.cardId, required this.isHidden});
+  const _AddTaskBar({super.key, required this.cardId, required this.isHidden});
   final String cardId;
   final bool isHidden;
 

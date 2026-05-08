@@ -6,11 +6,11 @@ part of 'init_provider.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$appInitHash() => r'3fd424cb1453e137ab412e07f75fb87de2849b09';
+String _$appInitHash() => r'7cfd7e589179d4b2c84170333f344253ade16b89';
 
 /// Ensures the database has at least one stack (provisions demo data on first
-/// launch). Returns the stack ID that should be set as the initial active stack,
-/// or null to show All Cards.
+/// launch) then restores the last-used view state.  Returns the stack ID to
+/// use as the initial active stack (non-null once the database is ready).
 ///
 /// Copied from [appInit].
 @ProviderFor(appInit)

@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -87,11 +86,7 @@ class _ShellReadyState extends ConsumerState<_ShellReady> {
       // Search overlay has its own handler (added later, fires first).
       // Here we only handle closing the task detail panel.
       if (mounted && ref.read(selectedTaskIdProvider) != null) {
-        SchedulerBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            ref.read(selectedTaskIdProvider.notifier).select(null);
-          }
-        });
+        ref.read(selectedTaskIdProvider.notifier).select(null);
         return true;
       }
     }
@@ -124,6 +119,12 @@ class _ShellReadyState extends ConsumerState<_ShellReady> {
       } else {
         dao.set('hiddenStackIds', jsonEncode(next.toList()));
       }
+    });
+
+    // Persist card layout so it survives app restarts.
+    ref.listen(lastCardLayoutModeProvider, (_, next) {
+      final dao = SettingsDao(ref.read(appDatabaseProvider));
+      dao.set('cardLayoutMode', next.index.toString());
     });
 
     // When navigating back to card view, restore the last card layout

@@ -23,9 +23,10 @@ final cardRepositoryProvider = Provider<CardRepository>.internal(
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef CardRepositoryRef = ProviderRef<CardRepository>;
-String _$cardsHash() => r'ede8a3c3046300ab9cc6c4bb6af8314546bd176d';
+String _$cardsHash() => r'bdc142dd85fb8f5a3ea40063fdf45f6fa3057e02';
 
-/// Active, visible cards for the active stack (or all stacks if stackId is null).
+/// Cards to display, filtered only by [hiddenStackIdsProvider].
+/// [activeStackIdProvider] controls where new cards are created, not what is shown.
 ///
 /// Copied from [cards].
 @ProviderFor(cards)
@@ -42,9 +43,9 @@ final cardsProvider = AutoDisposeStreamProvider<List<AppCard>>.internal(
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef CardsRef = AutoDisposeStreamProviderRef<List<AppCard>>;
-String _$archivedCardsHash() => r'd85053e6c317cba8237613f7cd439deda0b6d0e5';
+String _$archivedCardsHash() => r'b3db6b635d88d30c1f500789f5dfb618bd32d6fc';
 
-/// Archived cards, optionally filtered to the active stack.
+/// Archived cards across all stacks.
 ///
 /// Copied from [archivedCards].
 @ProviderFor(archivedCards)
