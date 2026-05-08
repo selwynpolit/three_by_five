@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../data/database/app_database.dart';
 import '../../../providers/tag_providers.dart';
+import 'tag_manager_dialog.dart';
 
 class TagsEditorWidget extends ConsumerStatefulWidget {
   const TagsEditorWidget({
@@ -25,6 +26,7 @@ class _TagsEditorWidgetState extends ConsumerState<TagsEditorWidget> {
   final _controller = TextEditingController();
   final _focus = FocusNode();
   bool _editing = false;
+  Color? _pendingTagColor;
 
   @override
   void dispose() {
@@ -37,9 +39,12 @@ class _TagsEditorWidgetState extends ConsumerState<TagsEditorWidget> {
     final trimmed = name.trim().toLowerCase();
     if (trimmed.isEmpty) return;
     _controller.clear();
-    await ref
-        .read(tagRepositoryProvider)
-        .addTagNameToTask(widget.taskId, trimmed);
+    await ref.read(tagRepositoryProvider).addTagNameToTask(
+          widget.taskId,
+          trimmed,
+          color: _pendingTagColor?.toARGB32(),
+        );
+    setState(() => _pendingTagColor = null);
   }
 
   Future<void> _removeTag(AppTag tag) async {
@@ -52,93 +57,147 @@ class _TagsEditorWidgetState extends ConsumerState<TagsEditorWidget> {
   Widget build(BuildContext context) {
     final tags = widget.tagsAsync.valueOrNull ?? [];
 
-    return Wrap(
-      spacing: 6,
-      runSpacing: 6,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        // Existing tags
-        for (final tag in tags)
-          _TagChip(
-            label: tag.name,
-            color: tag.color != null ? Color(tag.color!) : null,
-            onRemove: () => _removeTag(tag),
-            onColorTap: (newColor) => ref
-                .read(tagRepositoryProvider)
-                .updateTagColor(tag.id, newColor?.toARGB32()),
-          ),
+    // Non-null palette colors (skip the null entry)
+    final paletteColors = _TagChip._palette.whereType<Color>().toList();
 
-        // Add input
-        if (_editing)
-          SizedBox(
-            width: 120,
-            height: 26,
-            child: KeyboardListener(
-              focusNode: FocusNode(),
-              onKeyEvent: (event) {
-                if (event is KeyDownEvent) {
-                  if (event.logicalKey ==
-                          LogicalKeyboardKey.enter ||
-                      event.logicalKey ==
-                          LogicalKeyboardKey.comma) {
-                    _addTag(_controller.text);
-                    setState(() => _editing = false);
-                  } else if (event.logicalKey ==
-                      LogicalKeyboardKey.escape) {
-                    setState(() {
-                      _editing = false;
-                      _controller.clear();
-                    });
-                  }
-                }
-              },
-              child: TextField(
-                controller: _controller,
-                focusNode: _focus,
-                autofocus: true,
-                onSubmitted: (v) {
-                  _addTag(v);
-                  setState(() => _editing = false);
-                },
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: AppColors.textPrimary),
-                decoration: InputDecoration(
-                  hintText: 'tag name',
-                  hintStyle: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: AppColors.textDisabled),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
-                    borderSide: const BorderSide(
-                        color: AppColors.accent, width: 1),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
-                    borderSide: const BorderSide(
-                        color: AppColors.cardBorder, width: 0.5),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
-                    borderSide: const BorderSide(
-                        color: AppColors.accent, width: 1),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 4),
-                  isDense: true,
-                  filled: true,
-                  fillColor: AppColors.canvas,
-                ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            // Existing tags
+            for (final tag in tags)
+              _TagChip(
+                label: tag.name,
+                color: tag.color != null ? Color(tag.color!) : null,
+                onRemove: () => _removeTag(tag),
+                onColorTap: (newColor) => ref
+                    .read(tagRepositoryProvider)
+                    .updateTagColor(tag.id, newColor?.toARGB32()),
               ),
-            ),
-          )
-        else
-          // "Add tag" button
-          _AddTagButton(
-            onTap: () => setState(() => _editing = true),
+
+            // Add input
+            if (_editing)
+              SizedBox(
+                width: 120,
+                height: 26,
+                child: KeyboardListener(
+                  focusNode: FocusNode(),
+                  onKeyEvent: (event) {
+                    if (event is KeyDownEvent) {
+                      if (event.logicalKey == LogicalKeyboardKey.enter ||
+                          event.logicalKey == LogicalKeyboardKey.comma) {
+                        _addTag(_controller.text);
+                        setState(() => _editing = false);
+                      } else if (event.logicalKey ==
+                          LogicalKeyboardKey.escape) {
+                        setState(() {
+                          _editing = false;
+                          _controller.clear();
+                          _pendingTagColor = null;
+                        });
+                      }
+                    }
+                  },
+                  child: TextField(
+                    controller: _controller,
+                    focusNode: _focus,
+                    autofocus: true,
+                    onSubmitted: (v) {
+                      _addTag(v);
+                      setState(() => _editing = false);
+                    },
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: AppColors.textPrimary),
+                    decoration: InputDecoration(
+                      hintText: 'tag name',
+                      hintStyle: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: AppColors.textDisabled),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: const BorderSide(
+                            color: AppColors.accent, width: 1),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: const BorderSide(
+                            color: AppColors.cardBorder, width: 0.5),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: const BorderSide(
+                            color: AppColors.accent, width: 1),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      isDense: true,
+                      filled: true,
+                      fillColor: AppColors.canvas,
+                    ),
+                  ),
+                ),
+              )
+            else
+              // "Add tag" button
+              _AddTagButton(
+                onTap: () => setState(() => _editing = true),
+              ),
+          ],
+        ),
+
+        // Color picker row shown when editing a new tag
+        if (_editing) ...[
+          const SizedBox(height: 6),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: paletteColors.map((c) {
+              final isSelected = _pendingTagColor == c;
+              return GestureDetector(
+                onTap: () => setState(() => _pendingTagColor = c),
+                child: Container(
+                  margin: const EdgeInsets.only(right: 5),
+                  width: 14,
+                  height: 14,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: c,
+                    border: isSelected
+                        ? Border.all(color: Colors.white, width: 2)
+                        : Border.all(
+                            color: AppColors.cardBorder, width: 0.5),
+                  ),
+                ),
+              );
+            }).toList(),
           ),
+        ],
+
+        // Manage tags link
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton(
+            style: TextButton.styleFrom(
+              padding: EdgeInsets.zero,
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            onPressed: () => TagManagerDialog.show(context),
+            child: Text(
+              'Manage tags →',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.textTertiary,
+                  ),
+            ),
+          ),
+        ),
       ],
     );
   }

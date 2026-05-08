@@ -53,4 +53,36 @@ class TagsDao {
   Future<void> updateColor(String id, int? color) =>
       (_db.update(_db.tags)..where((t) => t.id.equals(id)))
           .write(TagsCompanion(color: Value(color)));
+
+  Future<void> renameTag(String id, String name) =>
+      (_db.update(_db.tags)..where((t) => t.id.equals(id)))
+          .write(TagsCompanion(name: Value(name)));
+
+  Future<void> deleteTag(String id) async {
+    await _db.transaction(() async {
+      await (_db.delete(_db.taskTags)
+            ..where((tt) => tt.tagId.equals(id)))
+          .go();
+      await (_db.delete(_db.tags)..where((t) => t.id.equals(id))).go();
+    });
+  }
+
+  Future<void> mergeTagInto(String keepId, String removeId) async {
+    final taskTagsList = await (_db.select(_db.taskTags)
+          ..where((tt) => tt.tagId.equals(removeId)))
+        .get();
+    await _db.transaction(() async {
+      for (final tt in taskTagsList) {
+        await _db.into(_db.taskTags).insert(
+          TaskTagsCompanion.insert(taskId: tt.taskId, tagId: keepId),
+          mode: InsertMode.insertOrIgnore,
+        );
+      }
+      await (_db.delete(_db.taskTags)
+            ..where((tt) => tt.tagId.equals(removeId)))
+          .go();
+      await (_db.delete(_db.tags)..where((t) => t.id.equals(removeId)))
+          .go();
+    });
+  }
 }

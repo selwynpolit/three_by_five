@@ -145,7 +145,7 @@ class _LayoutPicker extends ConsumerWidget {
         const SizedBox(width: 2),
         _PickerBtn(
           icon: Icons.style_outlined,
-          tooltip: 'Scattered',
+          tooltip: 'Stack view',
           active: current == CardLayoutMode.scattered,
           onTap: () => set(CardLayoutMode.scattered),
         ),
@@ -323,6 +323,8 @@ class _ScatteredView extends ConsumerStatefulWidget {
   ConsumerState<_ScatteredView> createState() => _ScatteredViewState();
 }
 
+const _kBackH = 280.0; // fixed height for _CardBack widget
+
 class _ScatteredViewState extends ConsumerState<_ScatteredView>
     with SingleTickerProviderStateMixin {
   int _idx = 0;
@@ -334,7 +336,7 @@ class _ScatteredViewState extends ConsumerState<_ScatteredView>
     super.initState();
     _flipCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 380),
+      duration: const Duration(milliseconds: 400),
     );
     _flipAnim = CurvedAnimation(parent: _flipCtrl, curve: Curves.easeInOut);
     _flipCtrl.addStatusListener((status) {
@@ -359,7 +361,8 @@ class _ScatteredViewState extends ConsumerState<_ScatteredView>
   }
 
   void _flipNext() {
-    if (_flipCtrl.isAnimating) return;
+    final n = _sorted.length;
+    if (_flipCtrl.isAnimating || n <= 1) return;
     _flipCtrl.forward();
   }
 
@@ -377,102 +380,201 @@ class _ScatteredViewState extends ConsumerState<_ScatteredView>
     final n = cards.length;
     if (n == 0) return const _EmptyState();
 
-    final current = cards[_idx];
+    final curIdx = _idx % n;
+    final current = cards[curIdx];
     final stackColor = _stackColor(current, widget.stackMap);
-    const cardWidth = AppSpacing.cardWidth;
-    const cardHeight = 280.0;
+    final doneCount = curIdx;
+    final remCount = n - curIdx - 1;
+    final peekCount = math.min(remCount, 3);
+    final hasDone = doneCount > 0;
 
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // ── Deck ──────────────────────────────────────────────────
-          GestureDetector(
-            onTap: _flipNext,
-            child: SizedBox(
-              width: cardWidth + 14, // extra room for peek offset
-              height: cardHeight + 10,
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  // Peek cards behind the current one
-                  for (var i = 2; i >= 1; i--)
-                    Positioned(
-                      left: i * 5.0,
-                      top: i * 3.5,
-                      width: cardWidth,
-                      height: 50,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: AppColors.cardSurface.withValues(
-                              alpha: 0.6 - (i * 0.15)),
-                          border: Border.all(
-                              color: AppColors.cardBorder, width: 0.5),
-                          borderRadius: const BorderRadius.only(
-                            topLeft: Radius.circular(AppSpacing.cardRadius),
-                            topRight: Radius.circular(AppSpacing.cardRadius),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 32),
+      child: Center(
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // COLUMN 1: done pile + current card
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Done pile (above, card backs)
+                if (hasDone)
+                  _DonePile(
+                    count: doneCount,
+                    stackColor: _stackColor(cards[curIdx - 1], widget.stackMap),
+                  ),
+                if (hasDone) const SizedBox(height: 14),
+
+                // Current card with remaining deck peeking at BOTTOM RIGHT
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    // Peek cards from remaining deck (bottom-right)
+                    for (var i = peekCount; i >= 1; i--)
+                      Positioned(
+                        right: -(i * 7.0),
+                        bottom: -(i * 6.0),
+                        child: SizedBox(
+                          width: AppSpacing.cardWidth,
+                          height: 52,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFAF7F0).withValues(
+                                  alpha: 0.85 - (peekCount - i) * 0.15),
+                              border: Border.all(
+                                  color: AppColors.cardBorder, width: 0.5),
+                            ),
                           ),
                         ),
                       ),
-                    ),
 
-                  // Flip animation — front/back
-                  AnimatedBuilder(
-                    animation: _flipAnim,
-                    builder: (context, _) {
-                      final angle = _flipAnim.value * math.pi;
-                      final showFront = angle < math.pi / 2;
-                      // Mirror the back so it doesn't appear flipped
-                      final displayAngle =
-                          showFront ? angle : angle - math.pi;
-                      return Transform(
-                        alignment: Alignment.center,
-                        transform: Matrix4.identity()
-                          ..setEntry(3, 2, 0.001)
-                          ..rotateX(displayAngle),
-                        child: showFront
-                            ? IndexCardWidget(
-                                card: current,
-                                stackColor: stackColor,
-                                stackName: widget.showStackPill
-                                    ? widget.stackMap[current.stackId]?.name
-                                    : null,
-                              )
-                            : _CardBack(stackColor: stackColor),
-                      );
-                    },
+                    // Animated current card (flip animation)
+                    AnimatedBuilder(
+                      animation: _flipAnim,
+                      builder: (ctx, _) {
+                        final angle = _flipAnim.value * math.pi;
+                        final isFront = angle < math.pi / 2;
+                        final displayAngle =
+                            isFront ? angle : angle - math.pi;
+                        return Transform(
+                          alignment: Alignment.center,
+                          transform: Matrix4.identity()
+                            ..setEntry(3, 2, 0.001)
+                            ..rotateX(displayAngle),
+                          child: isFront
+                              ? IndexCardWidget(
+                                  card: current,
+                                  stackColor: stackColor,
+                                  stackName: widget.showStackPill
+                                      ? widget.stackMap[current.stackId]?.name
+                                      : null,
+                                )
+                              : _CardBack(stackColor: stackColor),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ],
+            ),
+
+            const SizedBox(width: 16),
+
+            // COLUMN 2: Navigation buttons (right side)
+            Padding(
+              padding: EdgeInsets.only(
+                  top: hasDone ? _kBackH + 14 + 72 : 72),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Prev button (up)
+                  MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: GestureDetector(
+                      onTap: _prevCard,
+                      child: Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(
+                              alpha: n > 1 ? 0.15 : 0.05),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.keyboard_arrow_up,
+                          size: 22,
+                          color: Colors.white.withValues(
+                              alpha: n > 1 ? 0.85 : 0.3),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    '${_idx + 1}',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white.withValues(alpha: 0.9),
+                    ),
+                  ),
+                  Text(
+                    '/ $n',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.white.withValues(alpha: 0.5),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  // Next button (down = flip)
+                  MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: GestureDetector(
+                      onTap: _flipNext,
+                      child: Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(
+                              alpha: n > 1 ? 0.15 : 0.05),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.keyboard_arrow_down,
+                          size: 22,
+                          color: Colors.white.withValues(
+                              alpha: n > 1 ? 0.85 : 0.3),
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
-          ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
-          const SizedBox(height: 20),
+/// Done pile: stacked card backs for already-seen cards.
+class _DonePile extends StatelessWidget {
+  const _DonePile({required this.count, required this.stackColor});
+  final int count;
+  final Color stackColor;
 
-          // ── Nav row ───────────────────────────────────────────────
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _NavBtn(
-                icon: Icons.chevron_left,
-                onTap: _prevCard,
-              ),
-              const SizedBox(width: 12),
-              Text(
-                '${_idx + 1} / $n',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
+  @override
+  Widget build(BuildContext context) {
+    final extraLayers = math.min(count - 1, 2);
+    return SizedBox(
+      width: AppSpacing.cardWidth + extraLayers * 5.0,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // Bottom layers (behind)
+          for (var i = extraLayers; i >= 1; i--)
+            Positioned(
+              right: -(i * 5.0),
+              bottom: -(i * 3.5),
+              child: SizedBox(
+                width: AppSpacing.cardWidth,
+                height: _kBackH,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.cardSurface
+                        .withValues(alpha: 0.5 - i * 0.1),
+                    border: Border.all(
+                        color: AppColors.cardBorder, width: 0.5),
+                  ),
                 ),
               ),
-              const SizedBox(width: 12),
-              _NavBtn(
-                icon: Icons.chevron_right,
-                onTap: _flipNext,
-              ),
-            ],
-          ),
+            ),
+          // Top back card (most recently flipped)
+          _CardBack(stackColor: stackColor),
         ],
       ),
     );
@@ -488,7 +590,7 @@ class _CardBack extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: AppSpacing.cardWidth,
-      height: 280,
+      height: _kBackH,
       decoration: BoxDecoration(
         color: AppColors.cardSurface,
         border: Border.all(color: AppColors.cardBorder, width: 0.5),
@@ -527,44 +629,6 @@ class _RuledLinePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_RuledLinePainter old) => false;
-}
-
-/// Small circular nav button for the deck.
-class _NavBtn extends StatefulWidget {
-  const _NavBtn({required this.icon, required this.onTap});
-  final IconData icon;
-  final VoidCallback onTap;
-
-  @override
-  State<_NavBtn> createState() => _NavBtnState();
-}
-
-class _NavBtnState extends State<_NavBtn> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 100),
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: _hovered
-                ? Colors.white.withValues(alpha: 0.3)
-                : Colors.white.withValues(alpha: 0.15),
-          ),
-          child: Icon(widget.icon, size: 18, color: Colors.white),
-        ),
-      ),
-    );
-  }
 }
 
 // ── Free canvas layout ────────────────────────────────────────────────────────

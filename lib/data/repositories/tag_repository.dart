@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' show Value;
 import 'package:uuid/uuid.dart';
 import '../daos/tags_dao.dart';
 import '../database/app_database.dart';
@@ -14,11 +15,12 @@ class TagRepository {
 
   /// Returns an existing tag by name, creating it if it doesn't exist.
   /// Safe under concurrent calls: insertOrIgnore absorbs the unique constraint.
-  Future<AppTag> getOrCreate(String name) async {
+  Future<AppTag> getOrCreate(String name, {int? color}) async {
     final normalized = name.trim().toLowerCase();
     await _dao.insertTag(TagsCompanion.insert(
       id: _uuid.v4(),
       name: normalized,
+      color: Value(color),
       createdAt: DateTime.now(),
     ));
     return (await _dao.getByName(normalized))!;
@@ -34,11 +36,20 @@ class TagRepository {
       _dao.removeAllFromTask(taskId);
 
   /// Convenience: add tag by name, creating it if needed.
-  Future<void> addTagNameToTask(String taskId, String tagName) async {
-    final tag = await getOrCreate(tagName);
+  Future<void> addTagNameToTask(String taskId, String tagName,
+      {int? color}) async {
+    final tag = await getOrCreate(tagName, color: color);
     await addToTask(taskId, tag.id);
   }
 
   Future<void> updateTagColor(String id, int? color) =>
       _dao.updateColor(id, color);
+
+  Future<void> deleteTag(String id) => _dao.deleteTag(id);
+
+  Future<void> renameTag(String id, String name) =>
+      _dao.renameTag(id, name);
+
+  Future<void> mergeTagInto(String keepId, String removeId) =>
+      _dao.mergeTagInto(keepId, removeId);
 }
