@@ -1,8 +1,10 @@
+import 'dart:collection';
 import 'dart:math' as math;
 
 import 'package:intl/intl.dart' as intl;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -323,56 +325,231 @@ class _ScatteredView extends ConsumerStatefulWidget {
   ConsumerState<_ScatteredView> createState() => _ScatteredViewState();
 }
 
-const _kBackH = 280.0; // fixed height for _CardBack widget
+// ── Stack view constants (all tunable here) ───────────────────────────────────
+
+const _kDiscardFraction  = 0.45;    // left zone fraction of total width
+const _kGapFraction      = 0.10;    // gap between zones
+const _kDrawFraction     = 0.45;    // right zone fraction
+const _kMaxTotalWidth    = 920.0;   // cap before centering on wide windows
+const _kFlipMs           = 400;     // flip animation ms
+const _kArcPeakHeight    = 68.0;    // px the arc peaks above the midpoint
+const _kPeekCount        = 4;       // card-edge layers beneath current card
+const _kPeekDx           = 5.0;     // horizontal offset per peek layer
+const _kPeekDy           = 4.0;     // vertical offset per peek layer
+const _kPerspective      = 0.0015;  // Matrix4 [3,2] perspective entry
+const _kMaxShadowCards   = 8.0;     // clamp for shadow-depth parameter
+const _kNavBtnSize       = 48.0;    // nav arrow button diameter
+const _kCardTopPad       = 52.0;    // vertical padding above card zones
+const _kCardBackH        = 280.0;   // reference height for _CardBack widget
+const _kDotSize          = 7.0;     // position-indicator dot diameter
+
+// ── Layout metrics ────────────────────────────────────────────────────────────
+
+class _Metrics {
+  const _Metrics({
+    required this.totalW,
+    required this.hOffset,
+    required this.discardLeft,
+    required this.discardW,
+    required this.drawLeft,
+    required this.drawW,
+    required this.cardW,
+    required this.drawCardLeft,
+    required this.discardCardLeft,
+  });
+
+  final double totalW;
+  final double hOffset;
+  final double discardLeft;
+  final double discardW;
+  final double drawLeft;
+  final double drawW;
+  final double cardW;
+  final double drawCardLeft;    // draw zone card left edge (PIXEL-STABLE)
+  final double discardCardLeft; // discard zone card left edge
+
+  static _Metrics from(BoxConstraints c) {
+    final totalW = math.min(c.maxWidth, _kMaxTotalWidth);
+    final hOffset = (c.maxWidth - totalW) / 2;
+    final discardW = totalW * _kDiscardFraction;
+    final drawW = totalW * _kDrawFraction;
+    final drawLeft = hOffset + discardW + totalW * _kGapFraction;
+    final discardLeft = hOffset;
+    // Card width may be clamped on narrow windows.
+    final cardW = math.min(AppSpacing.cardWidth.toDouble(), drawW - 32.0);
+    return _Metrics(
+      totalW: totalW,
+      hOffset: hOffset,
+      discardLeft: discardLeft,
+      discardW: discardW,
+      drawLeft: drawLeft,
+      drawW: drawW,
+      cardW: cardW,
+      drawCardLeft: drawLeft + (drawW - cardW) / 2,
+      discardCardLeft: discardLeft + (discardW - cardW) / 2,
+    );
+  }
+
+  Offset get drawCardCenter =>
+      Offset(drawCardLeft + cardW / 2, _kCardTopPad + _kCardBackH / 2);
+  Offset get discardCardCenter =>
+      Offset(discardCardLeft + cardW / 2, _kCardTopPad + _kCardBackH / 2);
+
+  @override
+  bool operator ==(Object other) =>
+      other is _Metrics && other.totalW == totalW && other.hOffset == hOffset;
+  @override
+  int get hashCode => Object.hash(totalW, hOffset);
+}
+
+// ── Cubic bezier arc tween ────────────────────────────────────────────────────
+
+class _ArcTween extends Animatable<Offset> {
+  const _ArcTween({required this.begin, required this.end});
+  final Offset begin;
+  final Offset end;
+
+  @override
+  Offset transform(double t) {
+    // Cubic bezier: control points peak above the midpoint.
+    final midY = math.min(begin.dy, end.dy) - _kArcPeakHeight;
+    final midX = (begin.dx + end.dx) / 2;
+    final span = (end.dx - begin.dx).abs() * 0.25;
+    final dir = end.dx > begin.dx ? 1.0 : -1.0;
+    final p0 = begin;
+    final p1 = Offset(midX - span * dir, midY);
+    final p2 = Offset(midX + span * dir, midY);
+    final p3 = end;
+    // De Casteljau
+    final b01 = Offset.lerp(p0, p1, t)!;
+    final b12 = Offset.lerp(p1, p2, t)!;
+    final b23 = Offset.lerp(p2, p3, t)!;
+    final c01 = Offset.lerp(b01, b12, t)!;
+    final c12 = Offset.lerp(b12, b23, t)!;
+    return Offset.lerp(c01, c12, t)!;
+  }
+}
+
+// ── Stack view state ──────────────────────────────────────────────────────────
 
 class _ScatteredViewState extends ConsumerState<_ScatteredView>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
+
   int _idx = 0;
-  late final AnimationController _flipCtrl;
-  late final Animation<double> _flipAnim;
+
+  // Two independent controllers driven simultaneously.
+  late final AnimationController _rotCtrl; // rotation  0→1 → rotateY(0→π)
+  late final AnimationController _posCtrl; // position  0→1 → arc Offset
+
+  _ArcTween? _arcTween;
+  bool _activeForward = true;
+
+  // Proper flip queue — rapid taps queue without interrupting in-flight cards.
+  final Queue<bool> _queue = Queue<bool>();
+  bool _isAnimating = false;
+
+  // Latest layout metrics cached from LayoutBuilder.
+  _Metrics? _metrics;
+
+  List<AppCard> get _sorted =>
+      [...widget.cards]..sort((a, b) => b.date.compareTo(a.date));
 
   @override
   void initState() {
     super.initState();
-    _flipCtrl = AnimationController(
+    _rotCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 400),
+      duration: const Duration(milliseconds: _kFlipMs),
     );
-    _flipAnim = CurvedAnimation(parent: _flipCtrl, curve: Curves.easeInOut);
-    _flipCtrl.addStatusListener((status) {
-      if (status == AnimationStatus.completed) {
-        setState(() {
-          _idx = (_idx + 1) % _sorted.length;
-        });
-        _flipCtrl.reset();
-      }
+    _posCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: _kFlipMs),
+    );
+    // Only one listener needed — rotation and position share the same duration.
+    _rotCtrl.addStatusListener((status) {
+      if (status == AnimationStatus.completed) _completeFlip();
     });
   }
 
   @override
   void dispose() {
-    _flipCtrl.dispose();
+    _rotCtrl.dispose();
+    _posCtrl.dispose();
     super.dispose();
   }
 
-  List<AppCard> get _sorted {
-    final s = [...widget.cards]..sort((a, b) => b.date.compareTo(a.date));
-    return s;
-  }
+  // ── Queue management ──────────────────────────────────────────────────────
 
-  void _flipNext() {
+  void _requestFlip(bool forward) {
     final n = _sorted.length;
-    if (_flipCtrl.isAnimating || n <= 1) return;
-    _flipCtrl.forward();
+    if (forward && _idx >= n - 1) return;
+    if (!forward && _idx <= 0) return;
+    _queue.addLast(forward);
+    _processQueue();
   }
 
-  void _prevCard() {
-    if (_flipCtrl.isAnimating) return;
-    final cards = _sorted;
-    setState(() {
-      _idx = (_idx - 1 + cards.length) % cards.length;
-    });
+  void _processQueue() {
+    if (_isAnimating || _queue.isEmpty) return;
+    _isAnimating = true;
+    _activeForward = _queue.removeFirst();
+    _executeFlip();
   }
+
+  void _executeFlip() {
+    final m = _metrics;
+    if (m == null) { _isAnimating = false; return; }
+    _arcTween = _activeForward
+        ? _ArcTween(begin: m.drawCardCenter, end: m.discardCardCenter)
+        : _ArcTween(begin: m.discardCardCenter, end: m.drawCardCenter);
+    _rotCtrl.forward(from: 0);
+    _posCtrl.forward(from: 0);
+  }
+
+  void _completeFlip() {
+    _posCtrl.stop();
+    setState(() {
+      _idx = _activeForward ? _idx + 1 : _idx - 1;
+      _isAnimating = false;
+    });
+    _rotCtrl.reset();
+    _posCtrl.reset();
+    _processQueue();
+  }
+
+  // ── Smooth shadow depths ──────────────────────────────────────────────────
+
+  double _drawShadow(int n) {
+    final base = (n - _idx - 1).toDouble();
+    if (!_isAnimating) return base.clamp(0, _kMaxShadowCards);
+    final delta = _posCtrl.value;
+    return (_activeForward ? base - delta : base + delta).clamp(0, _kMaxShadowCards);
+  }
+
+  double _discardShadow() {
+    final base = _idx.toDouble();
+    if (!_isAnimating) return base.clamp(0, _kMaxShadowCards);
+    final delta = _posCtrl.value;
+    return (_activeForward ? base + delta : base - delta).clamp(0, _kMaxShadowCards);
+  }
+
+  // ── Window resize handling ────────────────────────────────────────────────
+
+  void _handleResize(BoxConstraints c) {
+    final m = _Metrics.from(c);
+    if (m == _metrics) return;
+    _metrics = m;
+    if (_isAnimating) {
+      // Snap animation to completion, recompute arc with new metrics.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _rotCtrl.value = 1.0;
+        _posCtrl.value = 1.0;
+        _completeFlip();
+      });
+    }
+  }
+
+  // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -380,235 +557,417 @@ class _ScatteredViewState extends ConsumerState<_ScatteredView>
     final n = cards.length;
     if (n == 0) return const _EmptyState();
 
-    final curIdx = _idx % n;
-    final current = cards[curIdx];
-    final stackColor = _stackColor(current, widget.stackMap);
-    final doneCount = curIdx;
-    final remCount = n - curIdx - 1;
-    final peekCount = math.min(remCount, 3);
-    final hasDone = doneCount > 0;
+    final cur = _idx.clamp(0, n - 1);
+    final current = cards[cur];
+    final curColor = _stackColor(current, widget.stackMap);
+    final canFwd = cur < n - 1;
+    final canBwd = cur > 0;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 32),
-      child: Center(
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // COLUMN 1: done pile + current card
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Done pile (above, card backs)
-                if (hasDone)
-                  _DonePile(
-                    count: doneCount,
-                    stackColor: _stackColor(cards[curIdx - 1], widget.stackMap),
-                  ),
-                if (hasDone) const SizedBox(height: 14),
+    return Focus(
+      autofocus: false,
+      onKeyEvent: (_, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+          _requestFlip(true);
+          return KeyEventResult.handled;
+        }
+        if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+          _requestFlip(false);
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Listener(
+        onPointerSignal: (ev) {
+          // Trackpad horizontal scroll → flip navigation.
+          // PointerScrollEvent is the concrete type for scroll signals.
+          final scroll = ev;
+          if (scroll.runtimeType.toString() == 'PointerScrollEvent') return;
+          // Handled via onPointerPanZoom below for trackpad; keep signal hook.
+        },
+        onPointerPanZoomUpdate: (ev) {
+          final dx = ev.panDelta.dx;
+          if (dx > 18) _requestFlip(true);
+          if (dx < -18) _requestFlip(false);
+        },
+        child: LayoutBuilder(builder: (context, constraints) {
+          _handleResize(constraints);
+          final m = _Metrics.from(constraints);
+          final anim = Listenable.merge([_rotCtrl, _posCtrl]);
 
-                // Current card with remaining deck peeking at BOTTOM RIGHT
-                Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    // Peek cards from remaining deck (bottom-right)
-                    for (var i = peekCount; i >= 1; i--)
-                      Positioned(
-                        right: -(i * 7.0),
-                        bottom: -(i * 6.0),
-                        child: SizedBox(
-                          width: AppSpacing.cardWidth,
-                          height: 52,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFFAF7F0).withValues(
-                                  alpha: 0.85 - (peekCount - i) * 0.15),
-                              border: Border.all(
-                                  color: AppColors.cardBorder, width: 0.5),
-                            ),
-                          ),
-                        ),
+          return AnimatedBuilder(
+            animation: anim,
+            builder: (ctx, _) {
+              final drawSh = _drawShadow(n);
+              final discSh = _discardShadow();
+
+              // ── arc position of the flying card ──────────────────
+              final posT = CurvedAnimation(
+                parent: _posCtrl, curve: Curves.easeInOut).value;
+              final arcOffset = _arcTween?.transform(posT) ?? m.drawCardCenter;
+
+              // ── rotateY angle ─────────────────────────────────────
+              final rotT = CurvedAnimation(
+                parent: _rotCtrl, curve: Curves.easeInOut).value;
+              final angle = rotT * math.pi;
+              final isFront = angle < math.pi / 2;
+              // displayAngle trick: both front and back faces render right-reading.
+              final displayAngle = isFront ? angle : angle - math.pi;
+
+              // Which card and face is the flying widget showing?
+              // Forward: card leaves draw (shows front, then back).
+              // Backward: card returns from discard (shows back, then front).
+              final flyingCard = _activeForward ? current : cards[math.max(0, cur - 1)];
+              final flyingShowFront = _activeForward ? isFront : !isFront;
+              final flyingColor = _stackColor(flyingCard, widget.stackMap);
+
+              return Stack(
+                fit: StackFit.expand,
+                clipBehavior: Clip.none,
+                children: [
+
+                  // ── Discard pile (left zone, FIXED) ──────────────
+                  if (cur > 0 || (_isAnimating && !_activeForward))
+                    Positioned(
+                      left: m.discardLeft,
+                      top: _kCardTopPad,
+                      width: m.discardW,
+                      child: _DiscardZone(
+                        count: _isAnimating && !_activeForward ? cur - 1 : cur,
+                        topColor: cur > 0
+                            ? _stackColor(cards[cur - 1], widget.stackMap)
+                            : curColor,
+                        shadowDepth: discSh,
+                        cardW: m.cardW,
+                        zoneW: m.discardW,
                       ),
+                    ),
 
-                    // Animated current card (flip animation)
-                    AnimatedBuilder(
-                      animation: _flipAnim,
-                      builder: (ctx, _) {
-                        final angle = _flipAnim.value * math.pi;
-                        final isFront = angle < math.pi / 2;
-                        final displayAngle =
-                            isFront ? angle : angle - math.pi;
-                        return Transform(
+                  // ── Draw stack (right zone, PIXEL-STABLE ANCHOR) ──
+                  Positioned(
+                    left: m.drawLeft,
+                    top: _kCardTopPad,
+                    width: m.drawW,
+                    child: _DrawZone(
+                      card: _isAnimating ? null : current,
+                      stackColor: curColor,
+                      stackName: widget.showStackPill
+                          ? widget.stackMap[current.stackId]?.name
+                          : null,
+                      remaining: n - cur - 1,
+                      shadowDepth: drawSh,
+                      cardW: m.cardW,
+                      zoneW: m.drawW,
+                    ),
+                  ),
+
+                  // ── Flying card overlay (during animation) ────────
+                  if (_isAnimating)
+                    Positioned(
+                      left: arcOffset.dx - m.cardW / 2,
+                      top: arcOffset.dy - _kCardBackH / 2,
+                      width: m.cardW,
+                      child: IgnorePointer(
+                        child: Transform(
                           alignment: Alignment.center,
                           transform: Matrix4.identity()
-                            ..setEntry(3, 2, 0.001)
-                            ..rotateX(displayAngle),
-                          child: isFront
+                            ..setEntry(3, 2, _kPerspective)
+                            ..rotateY(displayAngle),
+                          child: flyingShowFront
                               ? IndexCardWidget(
-                                  card: current,
-                                  stackColor: stackColor,
+                                  card: flyingCard,
+                                  stackColor: flyingColor,
                                   stackName: widget.showStackPill
-                                      ? widget.stackMap[current.stackId]?.name
+                                      ? widget.stackMap[flyingCard.stackId]?.name
                                       : null,
                                 )
-                              : _CardBack(stackColor: stackColor),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-              ],
-            ),
-
-            const SizedBox(width: 16),
-
-            // COLUMN 2: Navigation buttons (right side)
-            Padding(
-              padding: EdgeInsets.only(
-                  top: hasDone ? _kBackH + 14 + 72 : 72),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Prev button (up)
-                  MouseRegion(
-                    cursor: SystemMouseCursors.click,
-                    child: GestureDetector(
-                      onTap: _prevCard,
-                      child: Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(
-                              alpha: n > 1 ? 0.15 : 0.05),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.keyboard_arrow_up,
-                          size: 22,
-                          color: Colors.white.withValues(
-                              alpha: n > 1 ? 0.85 : 0.3),
+                              : _CardBack(
+                                  stackColor: flyingColor,
+                                  cardW: m.cardW,
+                                ),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    '${_idx + 1}',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white.withValues(alpha: 0.9),
+
+                  // ── Left nav arrow ────────────────────────────────
+                  Positioned(
+                    left: 16,
+                    top: _kCardTopPad + _kCardBackH / 2 - _kNavBtnSize / 2,
+                    child: _NavBtn(
+                      icon: Icons.chevron_left,
+                      enabled: canBwd,
+                      onTap: () => _requestFlip(false),
                     ),
                   ),
-                  Text(
-                    '/ $n',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.white.withValues(alpha: 0.5),
+
+                  // ── Right nav arrow ───────────────────────────────
+                  Positioned(
+                    right: 16,
+                    top: _kCardTopPad + _kCardBackH / 2 - _kNavBtnSize / 2,
+                    child: _NavBtn(
+                      icon: Icons.chevron_right,
+                      enabled: canFwd,
+                      onTap: () => _requestFlip(true),
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  // Next button (down = flip)
-                  MouseRegion(
-                    cursor: SystemMouseCursors.click,
-                    child: GestureDetector(
-                      onTap: _flipNext,
-                      child: Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(
-                              alpha: n > 1 ? 0.15 : 0.05),
-                          shape: BoxShape.circle,
+
+                  // ── Counter + dot indicator ───────────────────────
+                  Positioned(
+                    left: m.hOffset,
+                    width: m.totalW,
+                    top: _kCardTopPad + _kCardBackH + 20,
+                    child: Column(
+                      children: [
+                        Text(
+                          '${cur + 1} of $n',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.white.withValues(alpha: 0.55),
+                          ),
                         ),
-                        child: Icon(
-                          Icons.keyboard_arrow_down,
-                          size: 22,
-                          color: Colors.white.withValues(
-                              alpha: n > 1 ? 0.85 : 0.3),
+                        const SizedBox(height: 10),
+                        _DotIndicator(
+                          total: n,
+                          current: cur,
+                          onTap: (i) {
+                            final diff = i - cur;
+                            if (diff > 0) {
+                              for (var k = 0; k < diff; k++) { _requestFlip(true); }
+                            } else if (diff < 0) {
+                              for (var k = 0; k < -diff; k++) { _requestFlip(false); }
+                            }
+                          },
                         ),
-                      ),
+                      ],
                     ),
                   ),
                 ],
-              ),
-            ),
-          ],
-        ),
+              );
+            },
+          );
+        }),
       ),
     );
   }
 }
 
-/// Done pile: stacked card backs for already-seen cards.
-class _DonePile extends StatelessWidget {
-  const _DonePile({required this.count, required this.stackColor});
-  final int count;
+// ── Draw stack zone ───────────────────────────────────────────────────────────
+
+class _DrawZone extends StatelessWidget {
+  const _DrawZone({
+    required this.card,
+    required this.stackColor,
+    required this.stackName,
+    required this.remaining,
+    required this.shadowDepth,
+    required this.cardW,
+    required this.zoneW,
+  });
+
+  final AppCard? card;      // null during animation (current card is in flight)
   final Color stackColor;
+  final String? stackName;
+  final int remaining;      // cards below current
+  final double shadowDepth;
+  final double cardW;
+  final double zoneW;
 
   @override
   Widget build(BuildContext context) {
-    final extraLayers = math.min(count - 1, 2);
+    final peeks = math.min(remaining, _kPeekCount);
+    final cardLeft = (zoneW - cardW) / 2;
+
     return SizedBox(
-      width: AppSpacing.cardWidth + extraLayers * 5.0,
+      width: zoneW,
+      height: _kCardBackH + peeks * _kPeekDy + 16,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          // Bottom layers (behind)
-          for (var i = extraLayers; i >= 1; i--)
+          // ── Stack-depth shadow (proportional to remaining) ────────
+          if (shadowDepth > 0)
             Positioned(
-              right: -(i * 5.0),
-              bottom: -(i * 3.5),
-              child: SizedBox(
-                width: AppSpacing.cardWidth,
-                height: _kBackH,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: AppColors.cardSurface
-                        .withValues(alpha: 0.5 - i * 0.1),
-                    border: Border.all(
-                        color: AppColors.cardBorder, width: 0.5),
-                  ),
+              left: cardLeft,
+              top: 0,
+              width: cardW,
+              height: _kCardBackH,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(
+                          alpha: 0.28 * shadowDepth / _kMaxShadowCards),
+                      blurRadius: 10 + shadowDepth * 2,
+                      offset: Offset(5 + shadowDepth * 0.6,
+                          8 + shadowDepth * 0.9),
+                    ),
+                    BoxShadow(
+                      color: Colors.black.withValues(
+                          alpha: 0.12 * shadowDepth / _kMaxShadowCards),
+                      blurRadius: 28 + shadowDepth * 3,
+                      offset: Offset(10 + shadowDepth, 16 + shadowDepth),
+                    ),
+                  ],
                 ),
               ),
             ),
-          // Top back card (most recently flipped)
-          _CardBack(stackColor: stackColor),
+
+          // ── Peek layers (cards below, edges sticking out) ─────────
+          for (var i = peeks; i >= 1; i--)
+            Positioned(
+              left: cardLeft + i * _kPeekDx,
+              top: i * _kPeekDy,
+              width: cardW,
+              height: _kCardBackH,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: AppColors.cardSurface.withValues(
+                      alpha: 0.55 + (peeks - i) * 0.06),
+                  border: Border.all(
+                      color: AppColors.cardBorder
+                          .withValues(alpha: 0.6 + (peeks - i) * 0.1),
+                      width: 0.5),
+                ),
+              ),
+            ),
+
+          // ── Current card (on top, interactive) ────────────────────
+          if (card != null)
+            Positioned(
+              left: cardLeft,
+              top: 0,
+              width: cardW,
+              child: IndexCardWidget(
+                card: card!,
+                stackColor: stackColor,
+                stackName: stackName,
+              ),
+            ),
         ],
       ),
     );
   }
 }
 
-/// Blank card back shown during flip animation.
-class _CardBack extends StatelessWidget {
-  const _CardBack({required this.stackColor});
-  final Color stackColor;
+// ── Discard pile zone ─────────────────────────────────────────────────────────
+
+class _DiscardZone extends StatelessWidget {
+  const _DiscardZone({
+    required this.count,
+    required this.topColor,
+    required this.shadowDepth,
+    required this.cardW,
+    required this.zoneW,
+  });
+
+  final int count;           // how many cards are in the discard pile
+  final Color topColor;      // stack color of the top discard card
+  final double shadowDepth;
+  final double cardW;
+  final double zoneW;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: AppSpacing.cardWidth,
-      height: _kBackH,
-      decoration: BoxDecoration(
-        color: AppColors.cardSurface,
-        border: Border.all(color: AppColors.cardBorder, width: 0.5),
-        borderRadius: BorderRadius.circular(AppSpacing.cardRadius),
-      ),
-      clipBehavior: Clip.hardEdge,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+    if (count <= 0) return const SizedBox.shrink();
+    final peeks = math.min(count - 1, _kPeekCount);
+    final cardRight = (zoneW - cardW) / 2; // right-justify the card back
+    final cardLeft = zoneW - cardRight - cardW;
+
+    return SizedBox(
+      width: zoneW,
+      height: _kCardBackH + peeks * _kPeekDy + 16,
+      child: Stack(
+        clipBehavior: Clip.none,
         children: [
-          // Accent strip
-          Container(height: 3, color: stackColor),
-          // Ruled lines area
-          Expanded(
-            child: CustomPaint(
-              painter: _RuledLinePainter(),
+          // ── Shadow extends down-left (mirrored from draw stack) ───
+          if (shadowDepth > 0)
+            Positioned(
+              left: cardLeft,
+              top: 0,
+              width: cardW,
+              height: _kCardBackH,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(
+                          alpha: 0.28 * shadowDepth / _kMaxShadowCards),
+                      blurRadius: 10 + shadowDepth * 2,
+                      offset: Offset(-(5 + shadowDepth * 0.6),
+                          8 + shadowDepth * 0.9),
+                    ),
+                    BoxShadow(
+                      color: Colors.black.withValues(
+                          alpha: 0.12 * shadowDepth / _kMaxShadowCards),
+                      blurRadius: 28 + shadowDepth * 3,
+                      offset: Offset(-(10 + shadowDepth), 16 + shadowDepth),
+                    ),
+                  ],
+                ),
+              ),
             ),
+
+          // ── Peek layers (backs sticking out to the left) ──────────
+          for (var i = peeks; i >= 1; i--)
+            Positioned(
+              left: cardLeft - i * _kPeekDx,
+              top: i * _kPeekDy,
+              width: cardW,
+              height: _kCardBackH,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: AppColors.cardSurface.withValues(
+                      alpha: 0.5 + (peeks - i) * 0.07),
+                  border: Border.all(
+                      color: AppColors.cardBorder
+                          .withValues(alpha: 0.55 + (peeks - i) * 0.1),
+                      width: 0.5),
+                ),
+              ),
+            ),
+
+          // ── Top discard card (face-down, showing back) ────────────
+          Positioned(
+            left: cardLeft,
+            top: 0,
+            child: _CardBack(stackColor: topColor, cardW: cardW),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Card back ─────────────────────────────────────────────────────────────────
+
+class _CardBack extends StatelessWidget {
+  const _CardBack({required this.stackColor, required this.cardW});
+  final Color stackColor;
+  final double cardW;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: cardW,
+      height: _kCardBackH,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: AppColors.cardSurface,
+          border: Border.all(color: AppColors.cardBorder, width: 0.5),
+          borderRadius: BorderRadius.circular(AppSpacing.cardRadius),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(AppSpacing.cardRadius),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(height: 3, color: stackColor.withValues(alpha: 0.7)),
+              Expanded(
+                child: CustomPaint(painter: _RuledLinePainter()),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -617,18 +976,112 @@ class _CardBack extends StatelessWidget {
 class _RuledLinePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
+    final p = Paint()
       ..color = const Color(0xFFCFDFE8)
       ..strokeWidth = 0.6;
     var y = 26.0;
     while (y < size.height) {
-      canvas.drawLine(Offset(12, y), Offset(size.width - 12, y), paint);
+      canvas.drawLine(Offset(12, y), Offset(size.width - 12, y), p);
       y += 26.0;
     }
   }
 
   @override
   bool shouldRepaint(_RuledLinePainter old) => false;
+}
+
+// ── Nav arrow button ──────────────────────────────────────────────────────────
+
+class _NavBtn extends StatefulWidget {
+  const _NavBtn({required this.icon, required this.enabled, required this.onTap});
+  final IconData icon;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  State<_NavBtn> createState() => _NavBtnState();
+}
+
+class _NavBtnState extends State<_NavBtn> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor:
+          widget.enabled ? SystemMouseCursors.click : MouseCursor.defer,
+      child: GestureDetector(
+        onTapDown: widget.enabled
+            ? (_) => setState(() => _pressed = true)
+            : null,
+        onTapUp: widget.enabled
+            ? (_) => setState(() => _pressed = false)
+            : null,
+        onTapCancel: widget.enabled
+            ? () => setState(() => _pressed = false)
+            : null,
+        onTap: widget.enabled ? widget.onTap : null,
+        child: AnimatedScale(
+          scale: _pressed ? 0.88 : 1.0,
+          duration: const Duration(milliseconds: 80),
+          child: Container(
+            width: _kNavBtnSize,
+            height: _kNavBtnSize,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white.withValues(
+                  alpha: widget.enabled ? 0.18 : 0.06),
+            ),
+            child: Icon(
+              widget.icon,
+              size: 28,
+              color: Colors.white.withValues(
+                  alpha: widget.enabled ? 0.88 : 0.22),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Dot position indicator ────────────────────────────────────────────────────
+
+class _DotIndicator extends StatelessWidget {
+  const _DotIndicator(
+      {required this.total, required this.current, required this.onTap});
+  final int total;
+  final int current;
+  final void Function(int) onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    // Show at most 15 dots; compress larger decks.
+    final visible = math.min(total, 15);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(visible, (i) {
+        final mapped = visible == total ? i : (i * (total - 1) / (visible - 1)).round();
+        final active = mapped == current;
+        return GestureDetector(
+          onTap: () => onTap(visible == total ? i : mapped),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 3),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              width: active ? _kDotSize * 1.4 : _kDotSize,
+              height: active ? _kDotSize * 1.4 : _kDotSize,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withValues(
+                    alpha: active ? 0.92 : 0.28),
+              ),
+            ),
+          ),
+        );
+      }),
+    );
+  }
 }
 
 // ── Free canvas layout ────────────────────────────────────────────────────────

@@ -207,18 +207,10 @@ class _ShellReadyState extends ConsumerState<_ShellReady> {
                 ),
               ),
 
-              // ── Backdrop — tapping it closes the detail panel. ───
-              // When no panel is open it is transparent and passes all
-              // events through (HitTestBehavior.translucent).
-              GestureDetector(
-                behavior: selectedTaskId != null
-                    ? HitTestBehavior.opaque
-                    : HitTestBehavior.translucent,
-                onTap: selectedTaskId != null
-                    ? () => ref
-                        .read(selectedTaskIdProvider.notifier)
-                        .select(null)
-                    : null,
+              // ── Backdrop — visual depth cue only. ────────────────
+              // IgnorePointer so card interactions remain available
+              // while the panel is open. Close via ESC or the ✕ button.
+              IgnorePointer(
                 child: AnimatedOpacity(
                   opacity: selectedTaskId != null ? 1.0 : 0.0,
                   duration: const Duration(milliseconds: 200),
