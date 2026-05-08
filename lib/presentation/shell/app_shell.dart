@@ -184,6 +184,17 @@ class _ShellReadyState extends ConsumerState<_ShellReady> {
             child: Stack(
             fit: StackFit.expand,
             children: [
+              // ── Background tap-to-close (sits below everything) ──
+              if (selectedTaskId != null)
+                Positioned.fill(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => ref
+                        .read(selectedTaskIdProvider.notifier)
+                        .select(null),
+                  ),
+                ),
+
               // ── Main view ────────────────────────────────────────
               AnimatedSwitcher(
                 duration: const Duration(milliseconds: 220),

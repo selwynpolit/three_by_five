@@ -49,4 +49,8 @@ class TagsDao {
       (_db.delete(_db.taskTags)
             ..where((tt) => tt.taskId.equals(taskId)))
           .go();
+
+  Future<void> updateColor(String id, int? color) =>
+      (_db.update(_db.tags)..where((t) => t.id.equals(id)))
+          .write(TagsCompanion(color: Value(color)));
 }

@@ -61,7 +61,11 @@ class _TagsEditorWidgetState extends ConsumerState<TagsEditorWidget> {
         for (final tag in tags)
           _TagChip(
             label: tag.name,
+            color: tag.color != null ? Color(tag.color!) : null,
             onRemove: () => _removeTag(tag),
+            onColorTap: (newColor) => ref
+                .read(tagRepositoryProvider)
+                .updateTagColor(tag.id, newColor?.toARGB32()),
           ),
 
         // Add input
@@ -141,9 +145,28 @@ class _TagsEditorWidgetState extends ConsumerState<TagsEditorWidget> {
 }
 
 class _TagChip extends StatefulWidget {
-  const _TagChip({required this.label, required this.onRemove});
+  const _TagChip({
+    required this.label,
+    required this.onRemove,
+    this.color,
+    this.onColorTap,
+  });
   final String label;
   final VoidCallback onRemove;
+  final Color? color;
+  final ValueChanged<Color?>? onColorTap;
+
+  // 8-color palette (null = default/no color)
+  static const _palette = <Color?>[
+    null,
+    Color(0xFFD64545), // red
+    Color(0xFFE8873A), // orange
+    Color(0xFFCBAF26), // yellow
+    Color(0xFF4A7C59), // green
+    Color(0xFF3D5A80), // blue (default)
+    Color(0xFF7B4F9E), // purple
+    Color(0xFF8A4A6B), // pink
+  ];
 
   @override
   State<_TagChip> createState() => _TagChipState();
@@ -151,42 +174,130 @@ class _TagChip extends StatefulWidget {
 
 class _TagChipState extends State<_TagChip> {
   bool _hovered = false;
+  OverlayEntry? _pickerOverlay;
+
+  void _showColorPicker(BuildContext context) {
+    _removeOverlay();
+    final box = context.findRenderObject() as RenderBox;
+    final pos = box.localToGlobal(Offset.zero);
+    final size = box.size;
+
+    _pickerOverlay = OverlayEntry(
+      builder: (_) => Stack(
+        children: [
+          // dismiss background
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _removeOverlay,
+            ),
+          ),
+          Positioned(
+            left: pos.dx,
+            top: pos.dy + size.height + 4,
+            child: Material(
+              elevation: 4,
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.cardBorder, width: 0.5),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: _TagChip._palette.map((c) {
+                    final isSelected = c == widget.color ||
+                        (c == null && widget.color == null);
+                    return GestureDetector(
+                      onTap: () {
+                        _removeOverlay();
+                        widget.onColorTap?.call(c);
+                      },
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 3),
+                        width: 20,
+                        height: 20,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: c ?? AppColors.divider,
+                          border: isSelected
+                              ? Border.all(
+                                  color: AppColors.textPrimary, width: 2)
+                              : Border.all(
+                                  color: AppColors.cardBorder, width: 0.5),
+                        ),
+                        child: c == null
+                            ? const Icon(Icons.close,
+                                size: 12, color: AppColors.textTertiary)
+                            : null,
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    Overlay.of(context).insert(_pickerOverlay!);
+  }
+
+  void _removeOverlay() {
+    _pickerOverlay?.remove();
+    _pickerOverlay = null;
+  }
+
+  @override
+  void dispose() {
+    _removeOverlay();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final chipColor = widget.color;
+    final bg = chipColor != null
+        ? chipColor.withValues(alpha: 0.15)
+        : AppColors.tagBg;
+    final fg = chipColor ?? AppColors.tagText;
+
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 100),
-        padding:
-            const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: AppColors.tagBg,
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              widget.label,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.tagText,
-                    fontWeight: FontWeight.w500,
-                  ),
-            ),
-            if (_hovered) ...[
-              const SizedBox(width: 4),
-              GestureDetector(
-                onTap: widget.onRemove,
-                child: MouseRegion(
-                  cursor: SystemMouseCursors.click,
-                  child: const Icon(Icons.close,
-                      size: 11, color: AppColors.tagText),
-                ),
+      child: GestureDetector(
+        onLongPress: () => _showColorPicker(context),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 100),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                widget.label,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: fg,
+                      fontWeight: FontWeight.w500,
+                    ),
               ),
+              if (_hovered) ...[
+                const SizedBox(width: 4),
+                GestureDetector(
+                  onTap: widget.onRemove,
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: Icon(Icons.close, size: 11, color: fg),
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

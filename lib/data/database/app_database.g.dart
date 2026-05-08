@@ -3501,8 +3501,17 @@ class $TagsTable extends Tags with TableInfo<$TagsTable, AppTag> {
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _colorMeta = const VerificationMeta('color');
   @override
-  List<GeneratedColumn> get $columns => [id, name, createdAt];
+  late final GeneratedColumn<int> color = GeneratedColumn<int>(
+    'color',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, name, createdAt, color];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -3536,6 +3545,12 @@ class $TagsTable extends Tags with TableInfo<$TagsTable, AppTag> {
     } else if (isInserting) {
       context.missing(_createdAtMeta);
     }
+    if (data.containsKey('color')) {
+      context.handle(
+        _colorMeta,
+        color.isAcceptableOrUnknown(data['color']!, _colorMeta),
+      );
+    }
     return context;
   }
 
@@ -3557,6 +3572,10 @@ class $TagsTable extends Tags with TableInfo<$TagsTable, AppTag> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       )!,
+      color: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}color'],
+      ),
     );
   }
 
@@ -3570,13 +3589,22 @@ class AppTag extends DataClass implements Insertable<AppTag> {
   final String id;
   final String name;
   final DateTime createdAt;
-  const AppTag({required this.id, required this.name, required this.createdAt});
+  final int? color;
+  const AppTag({
+    required this.id,
+    required this.name,
+    required this.createdAt,
+    this.color,
+  });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['id'] = Variable<String>(id);
     map['name'] = Variable<String>(name);
     map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || color != null) {
+      map['color'] = Variable<int>(color);
+    }
     return map;
   }
 
@@ -3585,6 +3613,9 @@ class AppTag extends DataClass implements Insertable<AppTag> {
       id: Value(id),
       name: Value(name),
       createdAt: Value(createdAt),
+      color: color == null && nullToAbsent
+          ? const Value.absent()
+          : Value(color),
     );
   }
 
@@ -3597,6 +3628,7 @@ class AppTag extends DataClass implements Insertable<AppTag> {
       id: serializer.fromJson<String>(json['id']),
       name: serializer.fromJson<String>(json['name']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      color: serializer.fromJson<int?>(json['color']),
     );
   }
   @override
@@ -3606,19 +3638,27 @@ class AppTag extends DataClass implements Insertable<AppTag> {
       'id': serializer.toJson<String>(id),
       'name': serializer.toJson<String>(name),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'color': serializer.toJson<int?>(color),
     };
   }
 
-  AppTag copyWith({String? id, String? name, DateTime? createdAt}) => AppTag(
+  AppTag copyWith({
+    String? id,
+    String? name,
+    DateTime? createdAt,
+    Value<int?> color = const Value.absent(),
+  }) => AppTag(
     id: id ?? this.id,
     name: name ?? this.name,
     createdAt: createdAt ?? this.createdAt,
+    color: color.present ? color.value : this.color,
   );
   AppTag copyWithCompanion(TagsCompanion data) {
     return AppTag(
       id: data.id.present ? data.id.value : this.id,
       name: data.name.present ? data.name.value : this.name,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      color: data.color.present ? data.color.value : this.color,
     );
   }
 
@@ -3627,37 +3667,42 @@ class AppTag extends DataClass implements Insertable<AppTag> {
     return (StringBuffer('AppTag(')
           ..write('id: $id, ')
           ..write('name: $name, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('color: $color')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, name, createdAt);
+  int get hashCode => Object.hash(id, name, createdAt, color);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is AppTag &&
           other.id == this.id &&
           other.name == this.name &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.color == this.color);
 }
 
 class TagsCompanion extends UpdateCompanion<AppTag> {
   final Value<String> id;
   final Value<String> name;
   final Value<DateTime> createdAt;
+  final Value<int?> color;
   final Value<int> rowid;
   const TagsCompanion({
     this.id = const Value.absent(),
     this.name = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.color = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   TagsCompanion.insert({
     required String id,
     required String name,
     required DateTime createdAt,
+    this.color = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        name = Value(name),
@@ -3666,12 +3711,14 @@ class TagsCompanion extends UpdateCompanion<AppTag> {
     Expression<String>? id,
     Expression<String>? name,
     Expression<DateTime>? createdAt,
+    Expression<int>? color,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (name != null) 'name': name,
       if (createdAt != null) 'created_at': createdAt,
+      if (color != null) 'color': color,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -3680,12 +3727,14 @@ class TagsCompanion extends UpdateCompanion<AppTag> {
     Value<String>? id,
     Value<String>? name,
     Value<DateTime>? createdAt,
+    Value<int?>? color,
     Value<int>? rowid,
   }) {
     return TagsCompanion(
       id: id ?? this.id,
       name: name ?? this.name,
       createdAt: createdAt ?? this.createdAt,
+      color: color ?? this.color,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -3702,6 +3751,9 @@ class TagsCompanion extends UpdateCompanion<AppTag> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (color.present) {
+      map['color'] = Variable<int>(color.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -3714,6 +3766,7 @@ class TagsCompanion extends UpdateCompanion<AppTag> {
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('createdAt: $createdAt, ')
+          ..write('color: $color, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -6991,6 +7044,7 @@ typedef $$TagsTableCreateCompanionBuilder =
       required String id,
       required String name,
       required DateTime createdAt,
+      Value<int?> color,
       Value<int> rowid,
     });
 typedef $$TagsTableUpdateCompanionBuilder =
@@ -6998,6 +7052,7 @@ typedef $$TagsTableUpdateCompanionBuilder =
       Value<String> id,
       Value<String> name,
       Value<DateTime> createdAt,
+      Value<int?> color,
       Value<int> rowid,
     });
 
@@ -7044,6 +7099,11 @@ class $$TagsTableFilterComposer extends Composer<_$AppDatabase, $TagsTable> {
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get color => $composableBuilder(
+    column: $table.color,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -7095,6 +7155,11 @@ class $$TagsTableOrderingComposer extends Composer<_$AppDatabase, $TagsTable> {
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get color => $composableBuilder(
+    column: $table.color,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$TagsTableAnnotationComposer
@@ -7114,6 +7179,9 @@ class $$TagsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<int> get color =>
+      $composableBuilder(column: $table.color, builder: (column) => column);
 
   Expression<T> taskTagsRefs<T extends Object>(
     Expression<T> Function($$TaskTagsTableAnnotationComposer a) f,
@@ -7172,11 +7240,13 @@ class $$TagsTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String> name = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<int?> color = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => TagsCompanion(
                 id: id,
                 name: name,
                 createdAt: createdAt,
+                color: color,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -7184,11 +7254,13 @@ class $$TagsTableTableManager
                 required String id,
                 required String name,
                 required DateTime createdAt,
+                Value<int?> color = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => TagsCompanion.insert(
                 id: id,
                 name: name,
                 createdAt: createdAt,
+                color: color,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

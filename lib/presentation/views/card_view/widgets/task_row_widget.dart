@@ -4,6 +4,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../data/database/app_database.dart';
 import '../../../../domain/undo/undo_action.dart';
+import '../../../providers/tag_providers.dart';
 import '../../../providers/task_providers.dart';
 import '../../../providers/ui_state_providers.dart';
 
@@ -121,6 +122,20 @@ class _TaskRowWidgetState extends ConsumerState<TaskRowWidget>
   }
 
   Widget _buildRow(BuildContext context, AppTask task) {
+    // Watch tags to find a color for the title.
+    final tagsAsync = ref.watch(tagsForTaskProvider(task.id));
+    final tags = tagsAsync.valueOrNull ?? [];
+    AppTag? coloredTag;
+    for (final t in tags) {
+      if (t.color != null) {
+        coloredTag = t;
+        break;
+      }
+    }
+    final tagColor = (!task.isCompleted && coloredTag != null)
+        ? Color(coloredTag.color!)
+        : null;
+
     return SizedBox(
       height: 22,
       child: Row(
@@ -183,7 +198,7 @@ class _TaskRowWidgetState extends ConsumerState<TaskRowWidget>
                         ? AppColors.textDisabled
                         : task.isCompleted
                             ? AppColors.textCompleted
-                            : AppColors.textPrimary,
+                            : tagColor ?? AppColors.textPrimary,
                     decoration: task.isCompleted
                         ? TextDecoration.lineThrough
                         : null,

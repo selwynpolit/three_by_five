@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:intl/intl.dart' as intl;
 
 import 'package:flutter/material.dart';
@@ -5,7 +7,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_shadows.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../data/database/app_database.dart';
 import '../../../domain/undo/undo_action.dart';
@@ -307,9 +308,9 @@ class _GridView extends StatelessWidget {
   }
 }
 
-// ── Scattered layout ──────────────────────────────────────────────────────────
+// ── Scattered layout — flip-card deck ────────────────────────────────────────
 
-class _ScatteredView extends StatelessWidget {
+class _ScatteredView extends ConsumerStatefulWidget {
   const _ScatteredView(
       {required this.cards,
       required this.stackMap,
@@ -319,79 +320,248 @@ class _ScatteredView extends StatelessWidget {
   final bool showStackPill;
 
   @override
-  Widget build(BuildContext context) {
-    // Sort newest first so the most recent card appears visually "on top."
-    final sorted = [...cards]
-      ..sort((a, b) => b.date.compareTo(a.date));
+  ConsumerState<_ScatteredView> createState() => _ScatteredViewState();
+}
 
-    return Scrollbar(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(AppSpacing.viewPadding, 24,
-            AppSpacing.viewPadding + 14, 32),
-        child: Wrap(
-          spacing: 44,
-          runSpacing: 40,
-          children: sorted.map((c) => _StackedCard(
-                card: c,
-                stackColor: _stackColor(c, stackMap),
-                stackName: showStackPill ? stackMap[c.stackId]?.name : null,
-              )).toList(),
-        ),
+class _ScatteredViewState extends ConsumerState<_ScatteredView>
+    with SingleTickerProviderStateMixin {
+  int _idx = 0;
+  late final AnimationController _flipCtrl;
+  late final Animation<double> _flipAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _flipCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 380),
+    );
+    _flipAnim = CurvedAnimation(parent: _flipCtrl, curve: Curves.easeInOut);
+    _flipCtrl.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        setState(() {
+          _idx = (_idx + 1) % _sorted.length;
+        });
+        _flipCtrl.reset();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _flipCtrl.dispose();
+    super.dispose();
+  }
+
+  List<AppCard> get _sorted {
+    final s = [...widget.cards]..sort((a, b) => b.date.compareTo(a.date));
+    return s;
+  }
+
+  void _flipNext() {
+    if (_flipCtrl.isAnimating) return;
+    _flipCtrl.forward();
+  }
+
+  void _prevCard() {
+    if (_flipCtrl.isAnimating) return;
+    final cards = _sorted;
+    setState(() {
+      _idx = (_idx - 1 + cards.length) % cards.length;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cards = _sorted;
+    final n = cards.length;
+    if (n == 0) return const _EmptyState();
+
+    final current = cards[_idx];
+    final stackColor = _stackColor(current, widget.stackMap);
+    const cardWidth = AppSpacing.cardWidth;
+    const cardHeight = 280.0;
+
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // ── Deck ──────────────────────────────────────────────────
+          GestureDetector(
+            onTap: _flipNext,
+            child: SizedBox(
+              width: cardWidth + 14, // extra room for peek offset
+              height: cardHeight + 10,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  // Peek cards behind the current one
+                  for (var i = 2; i >= 1; i--)
+                    Positioned(
+                      left: i * 5.0,
+                      top: i * 3.5,
+                      width: cardWidth,
+                      height: 50,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: AppColors.cardSurface.withValues(
+                              alpha: 0.6 - (i * 0.15)),
+                          border: Border.all(
+                              color: AppColors.cardBorder, width: 0.5),
+                          borderRadius: const BorderRadius.only(
+                            topLeft: Radius.circular(AppSpacing.cardRadius),
+                            topRight: Radius.circular(AppSpacing.cardRadius),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                  // Flip animation — front/back
+                  AnimatedBuilder(
+                    animation: _flipAnim,
+                    builder: (context, _) {
+                      final angle = _flipAnim.value * math.pi;
+                      final showFront = angle < math.pi / 2;
+                      // Mirror the back so it doesn't appear flipped
+                      final displayAngle =
+                          showFront ? angle : angle - math.pi;
+                      return Transform(
+                        alignment: Alignment.center,
+                        transform: Matrix4.identity()
+                          ..setEntry(3, 2, 0.001)
+                          ..rotateX(displayAngle),
+                        child: showFront
+                            ? IndexCardWidget(
+                                card: current,
+                                stackColor: stackColor,
+                                stackName: widget.showStackPill
+                                    ? widget.stackMap[current.stackId]?.name
+                                    : null,
+                              )
+                            : _CardBack(stackColor: stackColor),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          // ── Nav row ───────────────────────────────────────────────
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _NavBtn(
+                icon: Icons.chevron_left,
+                onTap: _prevCard,
+              ),
+              const SizedBox(width: 12),
+              Text(
+                '${_idx + 1} / $n',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(width: 12),
+              _NavBtn(
+                icon: Icons.chevron_right,
+                onTap: _flipNext,
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 }
 
-/// Shows a card with two "peek" shadows behind it suggesting a physical stack.
-class _StackedCard extends StatelessWidget {
-  const _StackedCard(
-      {required this.card,
-      required this.stackColor,
-      required this.stackName});
-
-  final AppCard card;
+/// Blank card back shown during flip animation.
+class _CardBack extends StatelessWidget {
+  const _CardBack({required this.stackColor});
   final Color stackColor;
-  final String? stackName;
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
+    return Container(
+      width: AppSpacing.cardWidth,
+      height: 280,
       decoration: BoxDecoration(
-        boxShadow: [
-          // Deepest card in the stack (furthest behind, painted first)
-          BoxShadow(
-            color: const Color(0xFFF0ECE2),
-            offset: const Offset(10, 7),
-            blurRadius: 0,
-            spreadRadius: 0,
+        color: AppColors.cardSurface,
+        border: Border.all(color: AppColors.cardBorder, width: 0.5),
+        borderRadius: BorderRadius.circular(AppSpacing.cardRadius),
+      ),
+      clipBehavior: Clip.hardEdge,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Accent strip
+          Container(height: 3, color: stackColor),
+          // Ruled lines area
+          Expanded(
+            child: CustomPaint(
+              painter: _RuledLinePainter(),
+            ),
           ),
-          BoxShadow(
-            color: AppColors.cardBorder.withValues(alpha: 0.55),
-            offset: const Offset(10, 7),
-            blurRadius: 0,
-            spreadRadius: 0.6,
-          ),
-          // Middle card
-          BoxShadow(
-            color: AppColors.cardSurface,
-            offset: const Offset(5, 4),
-            blurRadius: 0,
-            spreadRadius: 0,
-          ),
-          BoxShadow(
-            color: AppColors.cardBorder.withValues(alpha: 0.75),
-            offset: const Offset(5, 4),
-            blurRadius: 0,
-            spreadRadius: 0.6,
-          ),
-          // Real drop shadow (painted last = closest to foreground)
-          ...AppShadows.card,
         ],
       ),
-      child: IndexCardWidget(
-        card: card,
-        stackColor: stackColor,
-        stackName: stackName,
+    );
+  }
+}
+
+class _RuledLinePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xFFCFDFE8)
+      ..strokeWidth = 0.6;
+    var y = 26.0;
+    while (y < size.height) {
+      canvas.drawLine(Offset(12, y), Offset(size.width - 12, y), paint);
+      y += 26.0;
+    }
+  }
+
+  @override
+  bool shouldRepaint(_RuledLinePainter old) => false;
+}
+
+/// Small circular nav button for the deck.
+class _NavBtn extends StatefulWidget {
+  const _NavBtn({required this.icon, required this.onTap});
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  State<_NavBtn> createState() => _NavBtnState();
+}
+
+class _NavBtnState extends State<_NavBtn> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 100),
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: _hovered
+                ? Colors.white.withValues(alpha: 0.3)
+                : Colors.white.withValues(alpha: 0.15),
+          ),
+          child: Icon(widget.icon, size: 18, color: Colors.white),
+        ),
       ),
     );
   }

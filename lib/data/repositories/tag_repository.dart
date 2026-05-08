@@ -38,4 +38,7 @@ class TagRepository {
     final tag = await getOrCreate(tagName);
     await addToTask(taskId, tag.id);
   }
+
+  Future<void> updateTagColor(String id, int? color) =>
+      _dao.updateColor(id, color);
 }
