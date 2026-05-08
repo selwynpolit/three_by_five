@@ -110,9 +110,13 @@ class _CardColumnWidgetState extends ConsumerState<CardColumnWidget> {
             ),
           ),
 
-          // ── Task list (min height = 5 task cells) ─────────────────
-          ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 5 * 26.0),
+          // ── Task list (fixed height = 5 task cells) ───────────────
+          ClipRect(
+            child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              minHeight: 5 * 26.0,
+              maxHeight: 5 * 26.0 + 8.0, // room for the final drop zone
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -184,7 +188,8 @@ class _CardColumnWidgetState extends ConsumerState<CardColumnWidget> {
                 ],
               ],
             ),
-          ),
+            ), // ConstrainedBox
+          ), // ClipRect
         ],
       ),
         ), // Padding (top layer)

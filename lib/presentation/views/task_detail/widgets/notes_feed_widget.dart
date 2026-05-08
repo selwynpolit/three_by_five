@@ -13,8 +13,9 @@ import '../../../utils/quill_image_embed.dart';
 import '../../../utils/quill_utils.dart';
 
 class NotesFeedWidget extends StatelessWidget {
-  const NotesFeedWidget({super.key, required this.notesAsync});
+  const NotesFeedWidget({super.key, required this.notesAsync, this.onAddNote});
   final AsyncValue<List<AppNote>> notesAsync;
+  final VoidCallback? onAddNote;
 
   @override
   Widget build(BuildContext context) {
@@ -23,6 +24,24 @@ class NotesFeedWidget extends StatelessWidget {
       error: (e, _) => const SizedBox.shrink(),
       data: (notes) {
         if (notes.isEmpty) {
+          if (onAddNote != null) {
+            return MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                onTap: onAddNote,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                    'No notes yet — tap to add.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppColors.textDisabled,
+                          fontStyle: FontStyle.italic,
+                        ),
+                  ),
+                ),
+              ),
+            );
+          }
           return Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Text(

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
@@ -22,5 +24,13 @@ void main() async {
     await windowManager.focus();
   });
 
-  runApp(const ProviderScope(child: ThreeByFiveApp()));
+  runZonedGuarded(
+    () => runApp(const ProviderScope(child: ThreeByFiveApp())),
+    (error, stack) {
+      // Suppress known flutter_quill paste assertion (Line.retain bounds check)
+      if (error is AssertionError &&
+          stack.toString().contains('line.dart')) { return; }
+      debugPrint('Uncaught error: $error\n$stack');
+    },
+  );
 }

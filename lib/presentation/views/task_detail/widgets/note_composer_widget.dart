@@ -24,11 +24,13 @@ class NoteComposerWidget extends StatefulWidget {
     required this.controller,
     required this.focusNode,
     required this.onSubmit,
+    this.onCmdReturn,
   });
 
   final QuillController controller;
   final FocusNode focusNode;
   final VoidCallback onSubmit;
+  final VoidCallback? onCmdReturn;
 
   @override
   State<NoteComposerWidget> createState() => _NoteComposerWidgetState();
@@ -125,7 +127,7 @@ class _NoteComposerWidgetState extends State<NoteComposerWidget> {
       child: CallbackShortcuts(
         bindings: {
           const SingleActivator(LogicalKeyboardKey.enter, meta: true):
-              widget.onSubmit,
+              widget.onCmdReturn ?? widget.onSubmit,
         },
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -49,13 +50,58 @@ class _TaskDetailPanelState extends ConsumerState<TaskDetailPanel> {
   static const _uuid = Uuid();
 
   @override
+  void initState() {
+    super.initState();
+    HardwareKeyboard.instance.addHandler(_handleEscKey);
+  }
+
+  @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handleEscKey);
     _debounce?.cancel();
     _titleController.dispose();
     _noteFocusNode.dispose();
     _quillController?.dispose();
     _noteQuillController?.dispose();
     super.dispose();
+  }
+
+  bool _handleEscKey(KeyEvent event) {
+    if (!mounted || event is! KeyDownEvent) return false;
+    if (event.logicalKey != LogicalKeyboardKey.escape) return false;
+    final noteCtrl = _noteQuillController;
+    final hasNoteContent = noteCtrl != null && noteCtrl.document.length > 1;
+    if (hasNoteContent) {
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _showEscDialog();
+      });
+      return true;
+    }
+    return false; // let global handler close normally
+  }
+
+  Future<void> _showEscDialog() async {
+    if (!mounted) return;
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Unsaved note'),
+        content: const Text('You have unsaved note content. Save before closing?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Save', style: TextStyle(fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    if (result == true) await _submitNote();
+    ref.read(selectedTaskIdProvider.notifier).select(null);
   }
 
   // ── Initialization ─────────────────────────────────────────────────────────
@@ -153,6 +199,11 @@ class _TaskDetailPanelState extends ConsumerState<TaskDetailPanel> {
         .read(noteRepositoryProvider)
         .create(taskId: widget.taskId, body: json);
     _clearNoteComposer();
+  }
+
+  Future<void> _submitNoteAndClose() async {
+    await _submitNote();
+    if (mounted) ref.read(selectedTaskIdProvider.notifier).select(null);
   }
 
   Future<void> _addLinkAttachment(String url) async {
@@ -325,8 +376,20 @@ class _TaskDetailPanelState extends ConsumerState<TaskDetailPanel> {
                     const SizedBox(height: 8),
 
                     // Quill editor
-                    DescriptionEditorWidget(
-                      controller: _quillController!,
+                    CallbackShortcuts(
+                      bindings: {
+                        const SingleActivator(LogicalKeyboardKey.enter, meta: true): () {
+                          // Force-save description and close
+                          _debounce?.cancel();
+                          final ctrl = _quillController;
+                          if (ctrl != null && ctrl.document.length > 1) {
+                            final json = jsonEncode(ctrl.document.toDelta().toJson());
+                            ref.read(taskRepositoryProvider).update(id: widget.taskId, description: json);
+                          }
+                          ref.read(selectedTaskIdProvider.notifier).select(null);
+                        },
+                      },
+                      child: DescriptionEditorWidget(controller: _quillController!),
                     ),
 
                     const SizedBox(height: 20),
@@ -352,7 +415,10 @@ class _TaskDetailPanelState extends ConsumerState<TaskDetailPanel> {
                     const SizedBox(height: 8),
 
                     // Notes feed
-                    NotesFeedWidget(notesAsync: notesAsync),
+                    NotesFeedWidget(
+                      notesAsync: notesAsync,
+                      onAddNote: () => _noteFocusNode.requestFocus(),
+                    ),
 
                     const SizedBox(height: 80),
                   ],
@@ -365,6 +431,7 @@ class _TaskDetailPanelState extends ConsumerState<TaskDetailPanel> {
               controller: _noteQuillController!,
               focusNode: _noteFocusNode,
               onSubmit: _submitNote,
+              onCmdReturn: _submitNoteAndClose,
             ),
           ],
         ),

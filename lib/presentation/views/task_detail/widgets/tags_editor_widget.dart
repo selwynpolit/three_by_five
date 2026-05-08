@@ -47,6 +47,15 @@ class _TagsEditorWidgetState extends ConsumerState<TagsEditorWidget> {
     setState(() => _pendingTagColor = null);
   }
 
+  Future<void> _addExistingTag(AppTag tag) async {
+    setState(() {
+      _editing = false;
+      _pendingTagColor = null;
+    });
+    _controller.clear();
+    await ref.read(tagRepositoryProvider).addToTask(widget.taskId, tag.id);
+  }
+
   Future<void> _removeTag(AppTag tag) async {
     await ref
         .read(tagRepositoryProvider)
@@ -56,9 +65,23 @@ class _TagsEditorWidgetState extends ConsumerState<TagsEditorWidget> {
   @override
   Widget build(BuildContext context) {
     final tags = widget.tagsAsync.valueOrNull ?? [];
+    final allTagsAsync = ref.watch(allTagsProvider);
+    final allTags = allTagsAsync.valueOrNull ?? [];
 
     // Non-null palette colors (skip the null entry)
     final paletteColors = _TagChip._palette.whereType<Color>().toList();
+
+    // Compute suggestions: tags whose name starts with typed text,
+    // not already assigned to this task, max 5.
+    final typed = _controller.text.toLowerCase();
+    final suggestions = (typed.isNotEmpty && tags.isEmpty)
+        ? allTags
+            .where((t) =>
+                t.name.startsWith(typed) &&
+                !tags.any((ct) => ct.id == t.id))
+            .take(5)
+            .toList()
+        : <AppTag>[];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -108,6 +131,7 @@ class _TagsEditorWidgetState extends ConsumerState<TagsEditorWidget> {
                       controller: _controller,
                       focusNode: _focus,
                       autofocus: true,
+                      onChanged: (_) => setState(() {}),
                       onSubmitted: (v) {
                         _addTag(v);
                         setState(() => _editing = false);
@@ -152,6 +176,47 @@ class _TagsEditorWidgetState extends ConsumerState<TagsEditorWidget> {
                 ),
           ],
         ),
+
+        // Suggestions from existing tags
+        if (_editing && tags.isEmpty && suggestions.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 4,
+            runSpacing: 4,
+            children: suggestions.map((tag) {
+              final chipColor = tag.color != null ? Color(tag.color!) : null;
+              final bg = chipColor != null
+                  ? chipColor.withValues(alpha: 0.15)
+                  : AppColors.tagBg;
+              final fg = chipColor ?? AppColors.tagText;
+              return GestureDetector(
+                onTap: () => _addExistingTag(tag),
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: bg,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                          color: (chipColor ?? AppColors.accent)
+                              .withValues(alpha: 0.3),
+                          width: 0.5),
+                    ),
+                    child: Text(
+                      tag.name,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: fg,
+                            fontWeight: FontWeight.w500,
+                          ),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
 
         // Color picker row shown when editing a new tag (only when no tag yet)
         if (_editing && tags.isEmpty) ...[
