@@ -184,17 +184,6 @@ class _ShellReadyState extends ConsumerState<_ShellReady> {
             child: Stack(
             fit: StackFit.expand,
             children: [
-              // ── Background tap-to-close (sits below everything) ──
-              if (selectedTaskId != null)
-                Positioned.fill(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => ref
-                        .read(selectedTaskIdProvider.notifier)
-                        .select(null),
-                  ),
-                ),
-
               // ── Main view ────────────────────────────────────────
               AnimatedSwitcher(
                 duration: const Duration(milliseconds: 220),
@@ -218,7 +207,28 @@ class _ShellReadyState extends ConsumerState<_ShellReady> {
                 ),
               ),
 
-              // ── Undo toast ───────────────────────────────────────
+              // ── Backdrop — tapping it closes the detail panel. ───
+              // When no panel is open it is transparent and passes all
+              // events through (HitTestBehavior.translucent).
+              GestureDetector(
+                behavior: selectedTaskId != null
+                    ? HitTestBehavior.opaque
+                    : HitTestBehavior.translucent,
+                onTap: selectedTaskId != null
+                    ? () => ref
+                        .read(selectedTaskIdProvider.notifier)
+                        .select(null)
+                    : null,
+                child: AnimatedOpacity(
+                  opacity: selectedTaskId != null ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 200),
+                  child: const ColoredBox(
+                      color: Color(0x18000000),
+                      child: SizedBox.expand()),
+                ),
+              ),
+
+              // ── Undo toast (above backdrop so it stays tappable) ─
               const Align(
                 alignment: Alignment.bottomCenter,
                 child: Padding(
@@ -229,18 +239,6 @@ class _ShellReadyState extends ConsumerState<_ShellReady> {
 
               // ── Global search overlay ────────────────────────────
               if (searchVisible) const SearchOverlay(),
-
-              // ── Backdrop — visual only; pointer events pass through so
-              //    task rows remain clickable while the panel is open. ────
-              IgnorePointer(
-                child: AnimatedOpacity(
-                  opacity: selectedTaskId != null ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 200),
-                  child: const ColoredBox(
-                      color: Color(0x18000000),
-                      child: SizedBox.expand()),
-                ),
-              ),
 
               // ── Detail panel (slides from right) ─────────────────
               Positioned(

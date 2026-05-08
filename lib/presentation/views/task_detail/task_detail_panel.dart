@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
@@ -82,6 +83,15 @@ class _TaskDetailPanelState extends ConsumerState<TaskDetailPanel> {
           .read(taskRepositoryProvider)
           .update(id: widget.taskId, title: title);
     });
+  }
+
+  void _forceSaveAndClose() {
+    _debounce?.cancel();
+    final title = _titleController.text.trim();
+    if (title.isNotEmpty) {
+      ref.read(taskRepositoryProvider).update(id: widget.taskId, title: title);
+    }
+    ref.read(selectedTaskIdProvider.notifier).select(null);
   }
 
   void _scheduleDescSave() {
@@ -251,26 +261,33 @@ class _TaskDetailPanelState extends ConsumerState<TaskDetailPanel> {
                   crossAxisAlignment:
                       CrossAxisAlignment.stretch,
                   children: [
-                    // Title
-                    TextField(
-                      controller: _titleController,
-                      style: AppTypography.textTheme.headlineMedium
-                          ?.copyWith(
-                        color: task.isCompleted
-                            ? AppColors.textCompleted
-                            : AppColors.textPrimary,
-                        decoration: task.isCompleted
-                            ? TextDecoration.lineThrough
-                            : null,
-                        decorationColor: AppColors.textCompleted,
+                    // Title — Enter saves and closes the panel.
+                    CallbackShortcuts(
+                      bindings: {
+                        const SingleActivator(
+                                LogicalKeyboardKey.enter):
+                            _forceSaveAndClose,
+                      },
+                      child: TextField(
+                        controller: _titleController,
+                        style: AppTypography.textTheme.headlineMedium
+                            ?.copyWith(
+                          color: task.isCompleted
+                              ? AppColors.textCompleted
+                              : AppColors.textPrimary,
+                          decoration: task.isCompleted
+                              ? TextDecoration.lineThrough
+                              : null,
+                          decorationColor: AppColors.textCompleted,
+                        ),
+                        maxLines: null,
+                        decoration: const InputDecoration(
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.zero,
+                          isDense: true,
+                        ),
+                        textInputAction: TextInputAction.done,
                       ),
-                      maxLines: null,
-                      decoration: const InputDecoration(
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.zero,
-                        isDense: true,
-                      ),
-                      textInputAction: TextInputAction.newline,
                     ),
 
                     const SizedBox(height: 12),
