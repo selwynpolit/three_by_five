@@ -199,26 +199,51 @@ class _TaskRowWidgetState extends ConsumerState<TaskRowWidget>
                     fontSize: 13,
                     fontWeight: hasRichContent && !task.isCompleted
                         ? FontWeight.w700
-                        : FontWeight.w500,
+                        : FontWeight.w400,
                     color: widget.isHidden
                         ? AppColors.textDisabled
                         : task.isCompleted
                             ? AppColors.textCompleted
                             : AppColors.textPrimary,
-                    // Completed → strikethrough. Tagged → colored underline.
                     decoration: task.isCompleted
                         ? TextDecoration.lineThrough
-                        : tagColor != null
-                            ? TextDecoration.underline
-                            : null,
+                        : null,
                     decorationColor:
-                        task.isCompleted ? AppColors.textCompleted : tagColor,
-                    decorationThickness: 2.2,
+                        task.isCompleted ? AppColors.textCompleted : null,
                   ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
           ),
+
+          // Tag color indicator — small dot at the right edge.
+          if (tagColor != null) ...[
+            const SizedBox(width: 3),
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Container(
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: tagColor,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+          ],
+
+          // Note indicator — pencil icon when task has notes/attachments.
+          if (hasRichContent && !task.isCompleted) ...[
+            const SizedBox(width: 3),
+            const Padding(
+              padding: EdgeInsets.only(top: 5),
+              child: Icon(
+                Icons.edit_note,
+                size: 11,
+                color: AppColors.textTertiary,
+              ),
+            ),
+          ],
         ],
       ),
     );

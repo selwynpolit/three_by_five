@@ -83,6 +83,19 @@ class TasksDao {
         ),
       );
 
+  /// Returns the next sort_order value for a new task in [cardId]/[column].
+  /// Queries existing tasks so the new task always appears at the bottom.
+  Future<int> nextSortOrder(String cardId, String column) async {
+    final rows = await (_db.select(_db.tasks)
+          ..where((t) =>
+              t.cardId.equals(cardId) &
+              t.columnName.equals(column) &
+              t.deletedAt.isNull()))
+        .get();
+    if (rows.isEmpty) return 0;
+    return rows.map((t) => t.sortOrder ?? -1).reduce((a, b) => a > b ? a : b) + 1;
+  }
+
   Future<void> reorder(List<String> orderedIds) async {
     await _db.transaction(() async {
       for (var i = 0; i < orderedIds.length; i++) {

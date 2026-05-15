@@ -29,6 +29,22 @@ class TagsDao {
     return query.map((row) => row.readTable(_db.tags)).watch();
   }
 
+  /// Returns a map of taskId → first tag name for all tagged tasks.
+  Stream<Map<String, String>> watchTaskTagNamesByTaskId() {
+    final query = _db.select(_db.taskTags).join([
+      innerJoin(_db.tags, _db.tags.id.equalsExp(_db.taskTags.tagId)),
+    ]);
+    return query.watch().map((rows) {
+      final map = <String, String>{};
+      for (final row in rows) {
+        final taskId = row.readTable(_db.taskTags).taskId;
+        final tagName = row.readTable(_db.tags).name;
+        map.putIfAbsent(taskId, () => tagName);
+      }
+      return map;
+    });
+  }
+
   /// Inserts a tag, silently ignoring the row if the name already exists.
   Future<void> insertTag(TagsCompanion entry) =>
       _db.into(_db.tags).insert(entry, mode: InsertMode.insertOrIgnore);

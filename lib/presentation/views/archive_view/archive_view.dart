@@ -58,29 +58,27 @@ class ArchiveView extends ConsumerWidget {
                 orElse: () => <String, AppStack>{},
               );
 
-              return Scrollbar(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.viewPadding,
-                    0,
-                    AppSpacing.viewPadding,
-                    AppSpacing.viewPadding,
-                  ),
-                  child: Wrap(
-                    spacing: AppSpacing.cardGap,
-                    runSpacing: AppSpacing.cardGap,
-                    children: cards.map((card) {
-                      final stack = stackMap[card.stackId];
-                      final stackColor = stack != null
-                          ? Color(stack.color)
-                          : AppColors.accent;
-                      return IndexCardWidget(
-                        key: ValueKey(card.id),
-                        card: card,
-                        stackColor: stackColor,
-                      );
-                    }).toList(),
-                  ),
+              return SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.viewPadding,
+                  0,
+                  AppSpacing.viewPadding,
+                  AppSpacing.viewPadding,
+                ),
+                child: Wrap(
+                  spacing: AppSpacing.cardGap,
+                  runSpacing: AppSpacing.cardGap,
+                  children: cards.map((card) {
+                    final stack = stackMap[card.stackId];
+                    final stackColor = stack != null
+                        ? Color(stack.color)
+                        : AppColors.accent;
+                    return IndexCardWidget(
+                      key: ValueKey(card.id),
+                      card: card,
+                      stackColor: stackColor,
+                    );
+                  }).toList(),
                 ),
               );
             },

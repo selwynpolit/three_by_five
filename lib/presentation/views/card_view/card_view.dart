@@ -15,6 +15,7 @@ import '../../../domain/undo/undo_action.dart';
 import '../../providers/canvas_providers.dart';
 import '../../providers/card_providers.dart';
 import '../../providers/stack_providers.dart';
+import '../../providers/tag_providers.dart';
 import '../../providers/task_providers.dart';
 import '../../providers/ui_state_providers.dart';
 import 'widgets/index_card_widget.dart';
@@ -139,13 +140,6 @@ class _LayoutPicker extends ConsumerWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         _PickerBtn(
-          icon: Icons.grid_view_rounded,
-          tooltip: 'Sorted grid',
-          active: current == CardLayoutMode.grid,
-          onTap: () => set(CardLayoutMode.grid),
-        ),
-        const SizedBox(width: 2),
-        _PickerBtn(
           icon: Icons.style_outlined,
           tooltip: 'Stack view',
           active: current == CardLayoutMode.scattered,
@@ -157,6 +151,13 @@ class _LayoutPicker extends ConsumerWidget {
           tooltip: 'Free canvas',
           active: current == CardLayoutMode.canvas,
           onTap: () => set(CardLayoutMode.canvas),
+        ),
+        const SizedBox(width: 2),
+        _PickerBtn(
+          icon: Icons.grid_view_rounded,
+          tooltip: 'Sorted grid',
+          active: current == CardLayoutMode.grid,
+          onTap: () => set(CardLayoutMode.grid),
         ),
         const SizedBox(width: 2),
         _PickerBtn(
@@ -290,11 +291,10 @@ class _GridView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scrollbar(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(AppSpacing.viewPadding, 0,
-            AppSpacing.viewPadding, AppSpacing.viewPadding),
-        child: Wrap(
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(AppSpacing.viewPadding, 0,
+          AppSpacing.viewPadding, AppSpacing.viewPadding),
+      child: Wrap(
           spacing: AppSpacing.cardGap,
           runSpacing: AppSpacing.cardGap,
           children: cards
@@ -304,7 +304,6 @@ class _GridView extends StatelessWidget {
                     stackName: showStackPill ? stackMap[c.stackId]?.name : null,
                   ))
               .toList(),
-        ),
       ),
     );
   }
@@ -373,8 +372,10 @@ class _Metrics {
     final hOffset = (c.maxWidth - totalW) / 2;
     final discardW = totalW * _kDiscardFraction;
     final drawW = totalW * _kDrawFraction;
-    final drawLeft = hOffset + discardW + totalW * _kGapFraction;
-    final discardLeft = hOffset;
+    // Draw stack (main) on the LEFT, discard (flipped) on the RIGHT
+    // so the task detail panel doesn't obscure the active card.
+    final drawLeft = hOffset;
+    final discardLeft = hOffset + drawW + totalW * _kGapFraction;
     // Card width may be clamped on narrow windows.
     final cardW = math.min(AppSpacing.cardWidth.toDouble(), drawW - 32.0);
     return _Metrics(
@@ -626,7 +627,7 @@ class _ScatteredViewState extends ConsumerState<_ScatteredView>
                 clipBehavior: Clip.none,
                 children: [
 
-                  // ── Discard pile (left zone, FIXED) ──────────────
+                  // ── Discard pile (right zone, FIXED) ─────────────
                   if (cur > 0 || (_isAnimating && !_activeForward))
                     Positioned(
                       left: m.discardLeft,
@@ -643,7 +644,7 @@ class _ScatteredViewState extends ConsumerState<_ScatteredView>
                       ),
                     ),
 
-                  // ── Draw stack (right zone, PIXEL-STABLE ANCHOR) ──
+                  // ── Draw stack (left zone, PIXEL-STABLE ANCHOR) ───
                   Positioned(
                     left: m.drawLeft,
                     top: _kCardTopPad,
@@ -963,7 +964,17 @@ class _CardBack extends StatelessWidget {
             children: [
               Container(height: 3, color: stackColor.withValues(alpha: 0.7)),
               Expanded(
-                child: CustomPaint(painter: _RuledLinePainter()),
+                child: Center(
+                  child: Text(
+                    'BACK',
+                    style: TextStyle(
+                      fontSize: 64,
+                      fontWeight: FontWeight.w900,
+                      color: AppColors.textPrimary.withValues(alpha: 0.07),
+                      letterSpacing: 10,
+                    ),
+                  ),
+                ),
               ),
             ],
           ),
@@ -1400,11 +1411,13 @@ class _DeleteCompletedButtonState
 // Column width constants
 const _kCbW = 36.0;    // checkbox
 const _kPriW = 24.0;   // priority dot
-const _kCardW = 130.0; // card title
-const _kDateW = 82.0;  // card date
-const _kDueW = 82.0;   // due date
-const _kWhereW = 56.0; // now / later
-const _kStatusW = 80.0; // hidden status
+const _kCardW = 110.0; // card title
+const _kDateW = 72.0;  // card date
+const _kDueW = 72.0;   // due date
+const _kWhereW = 50.0; // now / later
+const _kTagW = 80.0;   // tag name
+const _kStageW = 90.0; // kanban stage
+const _kStatusW = 70.0; // hidden status
 
 class _TaskRowData {
   const _TaskRowData({required this.task, this.card});
@@ -1429,27 +1442,33 @@ class _TaskListView extends ConsumerStatefulWidget {
 class _TaskListViewState extends ConsumerState<_TaskListView> {
   final _searchCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
+  // Cached so it can be used in dispose() where ref is already invalidated.
+  late final StateController<String> _searchNotifier;
 
   @override
   void initState() {
     super.initState();
-    _searchCtrl.addListener(
-        () => ref.read(taskListSearchProvider.notifier).state =
-            _searchCtrl.text);
+    _searchNotifier = ref.read(taskListSearchProvider.notifier);
+    _searchCtrl.addListener(() => _searchNotifier.state = _searchCtrl.text);
   }
 
   @override
   void dispose() {
     _searchCtrl.dispose();
     _scrollCtrl.dispose();
-    // Clear search state before super.dispose() — ref is invalid after that.
-    ref.read(taskListSearchProvider.notifier).state = '';
+    _searchNotifier.state = ''; // clear without going through ref
     super.dispose();
   }
 
   static const _priVal = {'high': 2, 'normal': 1, 'low': 0};
 
-  List<_TaskRowData> _sorted(List<_TaskRowData> rows, TaskSortConfig cfg) {
+  List<_TaskRowData> _sorted(
+    List<_TaskRowData> rows,
+    TaskSortConfig cfg,
+    Map<String, String> tagNames,
+    Map<String, int> stageOrders,
+  ) {
+    if (!cfg.isSorted) return rows; // natural DB order
     final result = List.of(rows);
     int dir(int v) => cfg.ascending ? v : -v;
 
@@ -1476,6 +1495,15 @@ class _TaskListViewState extends ConsumerState<_TaskListView> {
       case TaskListColumn.column:
         result.sort((a, b) =>
             dir(a.task.columnName.compareTo(b.task.columnName)));
+      case TaskListColumn.tag:
+        result.sort((a, b) => dir(
+            (tagNames[a.task.id] ?? '').compareTo(tagNames[b.task.id] ?? '')));
+      case TaskListColumn.stage:
+        result.sort((a, b) => dir(
+            (stageOrders[a.task.kanbanStageId] ?? 999)
+                .compareTo(stageOrders[b.task.kanbanStageId] ?? 999)));
+      case null:
+        break;
     }
     return result;
   }
@@ -1487,6 +1515,9 @@ class _TaskListViewState extends ConsumerState<_TaskListView> {
     final search = ref.watch(taskListSearchProvider);
     final sortCfg = ref.watch(taskListSortConfigProvider);
     final showHidden = ref.watch(showHiddenInTaskListProvider);
+    final tagNames = ref.watch(taskTagNamesProvider).valueOrNull ?? {};
+    final columns = ref.watch(boardColumnsProvider).valueOrNull ?? [];
+    final stageOrders = {for (final c in columns) c.id: c.sortOrder};
 
     // Build card map from all cards (including hidden ones).
     final cardMap = <String, AppCard>{
@@ -1508,9 +1539,11 @@ class _TaskListViewState extends ConsumerState<_TaskListView> {
           .toList();
     }
 
-    rows = _sorted(rows, sortCfg);
+    rows = _sorted(rows, sortCfg, tagNames, stageOrders);
 
-    return Column(
+    return ColoredBox(
+      color: AppColors.cardSurface,
+      child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // ── Search + toggle bar ───────────────────────────────────────
@@ -1519,7 +1552,14 @@ class _TaskListViewState extends ConsumerState<_TaskListView> {
           child: Row(
             children: [
               Expanded(
-                child: TextField(
+                child: CallbackShortcuts(
+                  bindings: {
+                    const SingleActivator(LogicalKeyboardKey.escape): () {
+                      _searchCtrl.clear();
+                      FocusScope.of(context).unfocus();
+                    },
+                  },
+                  child: TextField(
                   controller: _searchCtrl,
                   style: Theme.of(context).textTheme.bodyMedium,
                   decoration: InputDecoration(
@@ -1561,6 +1601,7 @@ class _TaskListViewState extends ConsumerState<_TaskListView> {
                     ),
                   ),
                 ),
+                ), // CallbackShortcuts
               ),
               const SizedBox(width: 10),
               // Hidden cards toggle
@@ -1654,7 +1695,8 @@ class _TaskListViewState extends ConsumerState<_TaskListView> {
                 ),
         ),
       ],
-    );
+      ), // Column
+    ); // ColoredBox
   }
 }
 
@@ -1686,6 +1728,8 @@ class _GridHeader extends ConsumerWidget {
               width: _kDueW),
           _ColHead('Where', TaskListColumn.column, sort, onSort,
               width: _kWhereW),
+          _ColHead('Tag', TaskListColumn.tag, sort, onSort, width: _kTagW),
+          _ColHead('Stage', TaskListColumn.stage, sort, onSort, width: _kStageW),
           SizedBox(
             width: _kStatusW,
             child: Text('Status',
@@ -1822,6 +1866,16 @@ class _GridDataRowState extends ConsumerState<_GridDataRow>
           fontSize: 11,
         );
 
+    final tagsAsync = ref.watch(tagsForTaskProvider(task.id));
+    final tags = tagsAsync.valueOrNull ?? [];
+    final tagName = tags.isNotEmpty ? tags.first.name : null;
+
+    final columns = ref.watch(boardColumnsProvider).valueOrNull ?? [];
+    String? stageName;
+    for (final c in columns) {
+      if (c.id == task.kanbanStageId) { stageName = c.title; break; }
+    }
+
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
@@ -1831,7 +1885,7 @@ class _GridDataRowState extends ConsumerState<_GridDataRow>
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 100),
           color: _hovered
-              ? AppColors.cardSurface
+              ? AppColors.divider
               : Colors.transparent,
           padding:
               const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -1841,32 +1895,37 @@ class _GridDataRowState extends ConsumerState<_GridDataRow>
               // Checkbox
               SizedBox(
                 width: _kCbW,
-                child: GestureDetector(
-                  onTap: _toggle,
-                  child: ScaleTransition(
-                    scale: Tween<double>(begin: 0.85, end: 1.0)
-                        .animate(_checkScale),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 180),
-                      width: 16,
-                      height: 16,
-                      decoration: BoxDecoration(
-                        color: task.isCompleted
-                            ? AppColors.accent
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(3),
-                        border: Border.all(
-                          color: task.isCompleted
-                              ? AppColors.accent
-                              : AppColors.cardBorder,
-                          width: 1.5,
+                child: Center(
+                  child: GestureDetector(
+                    onTap: _toggle,
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      child: ScaleTransition(
+                        scale: Tween<double>(begin: 0.85, end: 1.0)
+                            .animate(_checkScale),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          width: 16,
+                          height: 16,
+                          decoration: BoxDecoration(
+                            color: task.isCompleted
+                                ? AppColors.accent
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(3),
+                            border: Border.all(
+                              color: task.isCompleted
+                                  ? AppColors.accent
+                                  : AppColors.cardBorder,
+                              width: 1.5,
+                            ),
+                          ),
+                          child: task.isCompleted
+                              ? const Icon(Icons.check,
+                                  size: 10,
+                                  color: AppColors.textInverse)
+                              : null,
                         ),
                       ),
-                      child: task.isCompleted
-                          ? const Icon(Icons.check,
-                              size: 10,
-                              color: AppColors.textInverse)
-                          : null,
                     ),
                   ),
                 ),
@@ -1934,6 +1993,22 @@ class _GridDataRowState extends ConsumerState<_GridDataRow>
                   task.columnName == 'now' ? 'Now' : 'Later',
                   style: metaStyle,
                 ),
+              ),
+
+              // Tag name
+              SizedBox(
+                width: _kTagW,
+                child: tagName != null
+                    ? Text(tagName, style: metaStyle,
+                        maxLines: 1, overflow: TextOverflow.ellipsis)
+                    : Text('—', style: metaStyle),
+              ),
+
+              // Kanban stage
+              SizedBox(
+                width: _kStageW,
+                child: Text(stageName ?? '—', style: metaStyle,
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
               ),
 
               // Hidden / Snoozed status

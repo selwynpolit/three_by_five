@@ -7,17 +7,25 @@ import 'stack_providers.dart';
 enum CardLayoutMode { grid, scattered, canvas, taskList }
 
 /// Columns in the task list grid — also used as sort keys.
-enum TaskListColumn { task, card, cardDate, dueDate, priority, column }
+enum TaskListColumn { task, card, cardDate, dueDate, priority, column, tag, stage }
 
 /// Current sort for the task list grid.
+/// When [column] is null the list is in its natural (database) order.
 class TaskSortConfig {
   const TaskSortConfig(this.column, {this.ascending = true});
-  final TaskListColumn column;
+  const TaskSortConfig.unsorted() : column = null, ascending = true;
+
+  final TaskListColumn? column;
   final bool ascending;
 
-  TaskSortConfig withToggle(TaskListColumn col) => col == column
-      ? TaskSortConfig(column, ascending: !ascending)
-      : TaskSortConfig(col);
+  bool get isSorted => column != null;
+
+  /// Cycles: new-column → asc  |  same asc → desc  |  same desc → unsorted.
+  TaskSortConfig withToggle(TaskListColumn col) {
+    if (column != col) return TaskSortConfig(col);
+    if (ascending) return TaskSortConfig(col, ascending: false);
+    return const TaskSortConfig.unsorted();
+  }
 }
 
 final taskListSortConfigProvider = StateProvider<TaskSortConfig>(
@@ -29,12 +37,12 @@ final taskListSearchProvider = StateProvider<String>((ref) => '');
 final showHiddenInTaskListProvider = StateProvider<bool>((ref) => false);
 
 final cardLayoutModeProvider =
-    StateProvider<CardLayoutMode>((ref) => CardLayoutMode.grid);
+    StateProvider<CardLayoutMode>((ref) => CardLayoutMode.scattered);
 
 /// Tracks the last card-based layout (grid/scattered/canvas) so the view can
 /// be restored when navigating back from kanban or the task-list layout.
 final lastCardLayoutModeProvider =
-    StateProvider<CardLayoutMode>((ref) => CardLayoutMode.grid);
+    StateProvider<CardLayoutMode>((ref) => CardLayoutMode.scattered);
 
 final cardCanvasPositionsProvider =
     NotifierProvider<CardCanvasPositionsNotifier, Map<String, Offset>>(

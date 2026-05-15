@@ -201,6 +201,7 @@ class _IndexCardWidgetState extends ConsumerState<IndexCardWidget> {
       items: stacks
           .map((s) => PopupMenuItem(
                 value: s.id,
+                enabled: s.id != widget.card.stackId,
                 child: Row(
                   children: [
                     Container(
@@ -324,9 +325,6 @@ class _IndexCardWidgetState extends ConsumerState<IndexCardWidget> {
                     .where((t) =>
                         t.columnName == 'later' && t.deletedAt == null)
                     .toList();
-                final nowFull = now.length >= 6;
-                final laterFull = later.length >= 6;
-
                 return Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -388,8 +386,6 @@ class _IndexCardWidgetState extends ConsumerState<IndexCardWidget> {
                       key: _addBarKey,
                       cardId: widget.card.id,
                       isHidden: _isHiddenOrSnoozed || _isArchived,
-                      nowFull: nowFull,
-                      laterFull: laterFull,
                     ),
                   ],
                 );
@@ -768,13 +764,9 @@ class _AddTaskBar extends ConsumerStatefulWidget {
     super.key,
     required this.cardId,
     required this.isHidden,
-    this.nowFull = false,
-    this.laterFull = false,
   });
   final String cardId;
   final bool isHidden;
-  final bool nowFull;
-  final bool laterFull;
 
   @override
   ConsumerState<_AddTaskBar> createState() => _AddTaskBarState();
@@ -903,80 +895,68 @@ class _AddTaskBarState extends ConsumerState<_AddTaskBar> {
         child: Row(
           children: [
             Expanded(
-              child: Tooltip(
-                message: widget.nowFull ? 'Column full (5 max)' : '',
-                child: Opacity(
-                  opacity: widget.nowFull ? 0.35 : 1.0,
-                  child: GestureDetector(
-                    onTap: widget.nowFull ? null : () => _start('now'),
-                    child: Container(
-                      alignment: Alignment.center,
-                      decoration: const BoxDecoration(
-                        border: Border(
-                            right: BorderSide(
-                                color: AppColors.divider, width: 0.5)),
+              child: GestureDetector(
+                onTap: () => _start('now'),
+                child: Container(
+                  alignment: Alignment.center,
+                  decoration: const BoxDecoration(
+                    border: Border(
+                        right: BorderSide(
+                            color: AppColors.divider, width: 0.5)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.add,
+                          size: 12,
+                          color: _hovered
+                              ? AppColors.accent
+                              : AppColors.textTertiary),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Now',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: _hovered
+                              ? AppColors.accent
+                              : AppColors.textTertiary,
+                          fontWeight: _hovered
+                              ? FontWeight.w600
+                              : FontWeight.normal,
+                        ),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.add,
-                              size: 12,
-                              color: _hovered
-                                  ? AppColors.accent
-                                  : AppColors.textTertiary),
-                          const SizedBox(width: 4),
-                          Text(
-                            'Now',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: _hovered
-                                  ? AppColors.accent
-                                  : AppColors.textTertiary,
-                              fontWeight: _hovered
-                                  ? FontWeight.w600
-                                  : FontWeight.normal,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                    ],
                   ),
                 ),
               ),
             ),
             Expanded(
-              child: Tooltip(
-                message: widget.laterFull ? 'Column full (5 max)' : '',
-                child: Opacity(
-                  opacity: widget.laterFull ? 0.35 : 1.0,
-                  child: GestureDetector(
-                    onTap: widget.laterFull ? null : () => _start('later'),
-                    child: Container(
-                      alignment: Alignment.center,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.add,
-                              size: 12,
-                              color: _hovered
-                                  ? AppColors.accent
-                                  : AppColors.textTertiary),
-                          const SizedBox(width: 4),
-                          Text(
-                            'Later',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: _hovered
-                                  ? AppColors.accent
-                                  : AppColors.textTertiary,
-                              fontWeight: _hovered
-                                  ? FontWeight.w600
-                                  : FontWeight.normal,
-                            ),
-                          ),
-                        ],
+              child: GestureDetector(
+                onTap: () => _start('later'),
+                child: Container(
+                  alignment: Alignment.center,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.add,
+                          size: 12,
+                          color: _hovered
+                              ? AppColors.accent
+                              : AppColors.textTertiary),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Later',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: _hovered
+                              ? AppColors.accent
+                              : AppColors.textTertiary,
+                          fontWeight: _hovered
+                              ? FontWeight.w600
+                              : FontWeight.normal,
+                        ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
               ),

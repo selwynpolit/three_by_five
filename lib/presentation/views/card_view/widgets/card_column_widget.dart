@@ -34,13 +34,6 @@ class CardColumnWidget extends ConsumerStatefulWidget {
 
 class _CardColumnWidgetState extends ConsumerState<CardColumnWidget> {
   int? _dropIndex;
-  final _scrollCtrl = ScrollController();
-
-  @override
-  void dispose() {
-    _scrollCtrl.dispose();
-    super.dispose();
-  }
 
   Future<void> _reorder(String draggedId, int insertBefore) async {
     setState(() => _dropIndex = null);
@@ -119,12 +112,8 @@ class _CardColumnWidgetState extends ConsumerState<CardColumnWidget> {
           // ── Task list — fixed 6-slot height, scrollable for overflow ──
           SizedBox(
             height: 6 * 26.0, // 156 px = 6 task cells (4 drop + 22 row each)
-            child: Scrollbar(
-              controller: _scrollCtrl,
-              thumbVisibility: false,
-              child: SingleChildScrollView(
-                controller: _scrollCtrl,
-                child: Column(
+            child: SingleChildScrollView(
+              child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (tasks.isEmpty)
@@ -196,8 +185,7 @@ class _CardColumnWidgetState extends ConsumerState<CardColumnWidget> {
               ],
             ),          // Column
             ),          // SingleChildScrollView
-          ),            // Scrollbar
-        ),              // SizedBox
+          ),            // SizedBox
         ],
       ),
         ),              // Padding (top layer)
@@ -274,10 +262,12 @@ class _DragRowState extends State<_DragRow> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Drag handle — visible on hover, hidden otherwise.
-          AnimatedOpacity(
-            duration: const Duration(milliseconds: 120),
-            opacity: (_hovered && !ghost) ? 0.55 : 0.0,
+          // Drag handle — only takes layout space when hovered.
+          Visibility(
+            visible: _hovered && !ghost,
+            maintainSize: false,
+            maintainAnimation: false,
+            maintainState: false,
             child: const Padding(
               padding: EdgeInsets.only(top: 5, right: 2),
               child: MouseRegion(
@@ -291,9 +281,14 @@ class _DragRowState extends State<_DragRow> {
             ),
           ),
           Expanded(
-            child: TaskRowWidget(
-              task: widget.task,
-              isHidden: widget.isHidden,
+            child: Tooltip(
+              message: widget.task.title,
+              waitDuration: const Duration(milliseconds: 600),
+              preferBelow: false,
+              child: TaskRowWidget(
+                task: widget.task,
+                isHidden: widget.isHidden,
+              ),
             ),
           ),
         ],

@@ -27,6 +27,7 @@ class _TagsEditorWidgetState extends ConsumerState<TagsEditorWidget> {
   final _focus = FocusNode();
   bool _editing = false;
   Color? _pendingTagColor;
+  final _addBtnKey = GlobalKey();
 
   @override
   void dispose() {
@@ -62,26 +63,93 @@ class _TagsEditorWidgetState extends ConsumerState<TagsEditorWidget> {
         .removeFromTask(widget.taskId, tag.id);
   }
 
+  Future<void> _showTagDropdown() async {
+    final allTags = ref.read(allTagsProvider).valueOrNull ?? [];
+    final currentTags = widget.tagsAsync.valueOrNull ?? [];
+    final available = allTags
+        .where((t) => !currentTags.any((ct) => ct.id == t.id))
+        .toList();
+
+    // Skip the dropdown if there are no existing tags to choose from.
+    if (available.isEmpty) {
+      setState(() => _editing = true);
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) { if (mounted) _focus.requestFocus(); });
+      return;
+    }
+
+    final box = _addBtnKey.currentContext?.findRenderObject() as RenderBox?;
+    final offset = box != null
+        ? box.localToGlobal(Offset(0, box.size.height + 2))
+        : const Offset(200, 200);
+
+    final items = <PopupMenuEntry<String>>[
+      for (final tag in available)
+        PopupMenuItem<String>(
+          value: 'tag:${tag.id}',
+          height: 32,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 10,
+                height: 10,
+                margin: const EdgeInsets.only(right: 8),
+                decoration: BoxDecoration(
+                  color: tag.color != null ? Color(tag.color!) : AppColors.divider,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              Text(tag.name,
+                  style: Theme.of(_addBtnKey.currentContext!).textTheme.bodySmall),
+            ],
+          ),
+        ),
+      const PopupMenuDivider(),
+      PopupMenuItem<String>(
+        value: 'new',
+        height: 32,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.add, size: 13, color: AppColors.textTertiary),
+            const SizedBox(width: 5),
+            Text('New tag…',
+                style: Theme.of(_addBtnKey.currentContext!)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: AppColors.textSecondary)),
+          ],
+        ),
+      ),
+    ];
+
+    final result = await showMenu<String>(
+      context: _addBtnKey.currentContext!,
+      position: RelativeRect.fromLTRB(
+          offset.dx, offset.dy, offset.dx + 180, offset.dy + 1),
+      items: items,
+    );
+
+    if (result == null || !mounted) return;
+    if (result == 'new') {
+      setState(() => _editing = true);
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) { if (mounted) _focus.requestFocus(); });
+    } else if (result.startsWith('tag:')) {
+      final tagId = result.substring(4);
+      final tag = allTags.firstWhere((t) => t.id == tagId);
+      await _addExistingTag(tag);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final tags = widget.tagsAsync.valueOrNull ?? [];
-    final allTagsAsync = ref.watch(allTagsProvider);
-    final allTags = allTagsAsync.valueOrNull ?? [];
+    ref.watch(allTagsProvider); // keep allTags fresh for the dropdown
 
     // Non-null palette colors (skip the null entry)
     final paletteColors = _TagChip._palette.whereType<Color>().toList();
-
-    // Compute suggestions: tags whose name starts with typed text,
-    // not already assigned to this task, max 5.
-    final typed = _controller.text.toLowerCase();
-    final suggestions = (typed.isNotEmpty && tags.isEmpty)
-        ? allTags
-            .where((t) =>
-                t.name.startsWith(typed) &&
-                !tags.any((ct) => ct.id == t.id))
-            .take(5)
-            .toList()
-        : <AppTag>[];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -103,7 +171,7 @@ class _TagsEditorWidgetState extends ConsumerState<TagsEditorWidget> {
                     .updateTagColor(tag.id, newColor?.toARGB32()),
               ),
 
-            // Add/edit input — only shown when no tag yet (1 tag max per task).
+            // Add/edit — only when no tag yet (1 tag max per task).
             if (tags.isEmpty)
               if (_editing)
                 SizedBox(
@@ -171,54 +239,14 @@ class _TagsEditorWidgetState extends ConsumerState<TagsEditorWidget> {
                   ),
                 )
               else
-                _AddTagButton(
-                  onTap: () => setState(() => _editing = true),
+                KeyedSubtree(
+                  key: _addBtnKey,
+                  child: _AddTagButton(onTap: _showTagDropdown),
                 ),
           ],
         ),
 
-        // Suggestions from existing tags
-        if (_editing && tags.isEmpty && suggestions.isNotEmpty) ...[
-          const SizedBox(height: 4),
-          Wrap(
-            spacing: 4,
-            runSpacing: 4,
-            children: suggestions.map((tag) {
-              final chipColor = tag.color != null ? Color(tag.color!) : null;
-              final bg = chipColor != null
-                  ? chipColor.withValues(alpha: 0.15)
-                  : AppColors.tagBg;
-              final fg = chipColor ?? AppColors.tagText;
-              return GestureDetector(
-                onTap: () => _addExistingTag(tag),
-                child: MouseRegion(
-                  cursor: SystemMouseCursors.click,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: bg,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                          color: (chipColor ?? AppColors.accent)
-                              .withValues(alpha: 0.3),
-                          width: 0.5),
-                    ),
-                    child: Text(
-                      tag.name,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: fg,
-                            fontWeight: FontWeight.w500,
-                          ),
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-        ],
-
-        // Color picker row shown when editing a new tag (only when no tag yet)
+        // Color picker row shown when typing a new tag name
         if (_editing && tags.isEmpty) ...[
           const SizedBox(height: 6),
           Row(

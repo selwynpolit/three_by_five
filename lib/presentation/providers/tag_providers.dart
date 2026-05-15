@@ -17,3 +17,7 @@ Stream<List<AppTag>> allTags(AllTagsRef ref) =>
 @riverpod
 Stream<List<AppTag>> tagsForTask(TagsForTaskRef ref, String taskId) =>
     TagsDao(ref.watch(appDatabaseProvider)).watchByTask(taskId);
+
+/// Map of taskId → first tag name, used for sorting the task list by tag.
+final taskTagNamesProvider = StreamProvider<Map<String, String>>((ref) =>
+    TagsDao(ref.watch(appDatabaseProvider)).watchTaskTagNamesByTaskId());

@@ -35,6 +35,7 @@ class TaskRepository {
   }) async {
     final id = _uuid.v4();
     final now = DateTime.now();
+    final sortOrder = await _dao.nextSortOrder(cardId, column);
     await _dao.insert(TasksCompanion.insert(
       id: id,
       cardId: cardId,
@@ -45,6 +46,7 @@ class TaskRepository {
       dueDate: Value(dueDate),
       rrule: Value(rrule),
       kanbanStageId: Value(kanbanStageId),
+      sortOrder: Value(sortOrder),
       createdAt: now,
       updatedAt: now,
     ));

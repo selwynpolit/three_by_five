@@ -141,6 +141,7 @@ class _ShellReadyState extends ConsumerState<_ShellReady> {
     final activeStackId = ref.watch(activeStackIdProvider);
     final selectedTaskId = ref.watch(selectedTaskIdProvider);
     final searchVisible = ref.watch(searchOverlayVisibleProvider);
+    final layoutMode = ref.watch(cardLayoutModeProvider);
 
     void switchView(AppView view) =>
         ref.read(activeViewProvider.notifier).set(view);
@@ -200,21 +201,35 @@ class _ShellReadyState extends ConsumerState<_ShellReady> {
                   ),
                 ),
                 child: KeyedSubtree(
-                  key: ValueKey('$activeView|$activeStackId'),
+                  // Keep the task list view alive across stack switches so
+                  // Riverpod stream providers don't notify a defunct element.
+                  key: (activeView == AppView.cardView ||
+                          activeView == AppView.allCardsView) &&
+                      layoutMode == CardLayoutMode.taskList
+                      ? const ValueKey('taskList')
+                      : ValueKey('$activeView|$activeStackId'),
                   child: _viewFor(activeView),
                 ),
               ),
 
-              // ── Backdrop — visual depth cue only. ────────────────
-              // IgnorePointer so card interactions remain available
-              // while the panel is open. Close via ESC or the ✕ button.
+              // ── Backdrop — dims + closes the panel on any tap outside it. ─
+              // IgnorePointer(ignoring: true) when no task is selected so
+              // card interactions are completely unaffected. When a task IS
+              // selected the GestureDetector (opaque) catches any tap that
+              // falls outside the Positioned panel and closes it.
               IgnorePointer(
-                child: AnimatedOpacity(
-                  opacity: selectedTaskId != null ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 200),
-                  child: const ColoredBox(
-                      color: Color(0x18000000),
-                      child: SizedBox.expand()),
+                ignoring: selectedTaskId == null,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () =>
+                      ref.read(selectedTaskIdProvider.notifier).select(null),
+                  child: AnimatedOpacity(
+                    opacity: selectedTaskId != null ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 200),
+                    child: const ColoredBox(
+                        color: Color(0x18000000),
+                        child: SizedBox.expand()),
+                  ),
                 ),
               ),
 

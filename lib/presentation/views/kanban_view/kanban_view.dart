@@ -12,7 +12,7 @@ import '../../providers/ui_state_providers.dart';
 
 // ── Layout constants ───────────────────────────────────────────────────────────
 
-const _kColWidth = 284.0;
+const _kColWidth = 240.0;
 const _kColGap = 14.0;
 const _kCardRadius = 8.0;
 const _kColRadius = 10.0;
@@ -30,8 +30,14 @@ class KanbanView extends ConsumerStatefulWidget {
 class _KanbanViewState extends ConsumerState<KanbanView> {
   bool _hideCompleted = false;
   String _search = '';
-  // The task currently being dragged (used to suppress hover effects on source).
   AppTask? _dragging;
+  final _scrollCtrl = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -101,30 +107,38 @@ class _KanbanViewState extends ConsumerState<KanbanView> {
       if (bucket != null) byCol[bucket]!.add(t);
     }
 
-    return ListView.separated(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-      itemCount: columns.length + 1, // +1 for the add-column ghost
-      separatorBuilder: (_, _) => const SizedBox(width: _kColGap),
-      itemBuilder: (context, i) {
-        if (i == columns.length) return _AddColumnGhost(onAdd: _addColumn);
-        final col = columns[i];
-        return _KanbanColumn(
-          key: ValueKey(col.id),
-          column: col,
-          tasks: byCol[col.id] ?? [],
-          cardMap: cardMap,
-          dragging: _dragging,
-          onDragStart: (t) => setState(() => _dragging = t),
-          onDragEnd: () => setState(() => _dragging = null),
-        );
-      },
+    return Column(
+      children: [
+        Expanded(
+          child: ListView.separated(
+            controller: _scrollCtrl,
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+            itemCount: columns.length + 1, // +1 for the add-column ghost
+            separatorBuilder: (_, _) => const SizedBox(width: _kColGap),
+            itemBuilder: (context, i) {
+              if (i == columns.length) return _AddColumnGhost(onAdd: _addColumn);
+              final col = columns[i];
+              return _KanbanColumn(
+                key: ValueKey(col.id),
+                column: col,
+                tasks: byCol[col.id] ?? [],
+                cardMap: cardMap,
+                dragging: _dragging,
+                onDragStart: (t) => setState(() => _dragging = t),
+                onDragEnd: () => setState(() => _dragging = null),
+              );
+            },
+          ),
+        ),
+        _KanbanScrollbar(controller: _scrollCtrl),
+      ],
     );
   }
 
   Future<void> _addColumn() async {
     final name = await _promptColumnName(context);
-    if (name == null || name.isEmpty) return;
+    if (name == null || name.isEmpty || !mounted) return;
     await ref.read(boardColumnsDaoProvider).create(name);
   }
 }
@@ -362,7 +376,8 @@ class _KanbanColumnState extends ConsumerState<_KanbanColumn> {
     final text = _titleCtrl.text.trim();
     setState(() => _editingTitle = false);
     if (text.isNotEmpty && text != widget.column.title) {
-      await ref.read(boardColumnsDaoProvider).rename(widget.column.id, text);
+      final dao = ref.read(boardColumnsDaoProvider);
+      await dao.rename(widget.column.id, text);
     } else {
       _titleCtrl.text = widget.column.title;
     }
@@ -389,20 +404,27 @@ class _KanbanColumnState extends ConsumerState<_KanbanColumn> {
         ],
       ),
     );
-    if (confirmed == true) {
+    if (confirmed == true && mounted) {
       await ref.read(boardColumnsDaoProvider).delete(widget.column.id);
     }
   }
 
   Future<void> _handleDrop(AppTask task, int insertBefore) async {
     setState(() => _dropIndex = null);
+    final repo = ref.read(taskRepositoryProvider); // capture before any await
     final tasks = widget.tasks;
     final from = tasks.indexWhere((t) => t.id == task.id);
     if (from == -1) {
-      // Cross-column: just update the stage; the task will appear at the end.
-      await ref
-          .read(taskRepositoryProvider)
-          .updateKanbanStage(task.id, widget.column.id);
+      // Cross-column: update stage.
+      await repo.updateKanbanStage(task.id, widget.column.id);
+      if (!mounted) return;
+      // Auto-complete when dropped into "Done"; auto-uncomplete when dragged out.
+      final isDone = widget.column.title.toLowerCase() == 'done';
+      if (isDone && !task.isCompleted) {
+        await repo.markComplete(task.id, completed: true);
+      } else if (!isDone && task.isCompleted) {
+        await repo.markComplete(task.id, completed: false);
+      }
     } else {
       // Same-column reorder.
       var to = insertBefore;
@@ -411,9 +433,7 @@ class _KanbanColumnState extends ConsumerState<_KanbanColumn> {
       final reordered = List<AppTask>.from(tasks)
         ..removeAt(from)
         ..insert(to, tasks[from]);
-      await ref
-          .read(taskRepositoryProvider)
-          .reorder(reordered.map((t) => t.id).toList());
+      await repo.reorder(reordered.map((t) => t.id).toList());
     }
   }
 
@@ -927,6 +947,85 @@ class _AddColumnGhostState extends State<_AddColumnGhost> {
   }
 }
 
+// ── Custom horizontal scrollbar ───────────────────────────────────────────────
+
+/// A self-contained scrollbar strip that listens to [controller] and renders
+/// a visible track + thumb outside the scrollable content area.
+class _KanbanScrollbar extends StatefulWidget {
+  const _KanbanScrollbar({required this.controller});
+  final ScrollController controller;
+
+  @override
+  State<_KanbanScrollbar> createState() => _KanbanScrollbarState();
+}
+
+class _KanbanScrollbarState extends State<_KanbanScrollbar> {
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_rebuild);
+  }
+
+  void _rebuild() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_rebuild);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+      child: LayoutBuilder(builder: (_, constraints) {
+        final trackW = constraints.maxWidth;
+        double? thumbLeft, thumbW;
+
+        if (widget.controller.hasClients) {
+          final pos = widget.controller.position;
+          if (pos.hasContentDimensions && pos.maxScrollExtent > 0) {
+            final ratio = pos.viewportDimension / (pos.maxScrollExtent + pos.viewportDimension);
+            thumbW = (trackW * ratio).clamp(40.0, trackW - 4);
+            final fraction = pos.pixels / pos.maxScrollExtent;
+            thumbLeft = fraction * (trackW - thumbW!);
+          }
+        }
+
+        return SizedBox(
+          height: 8,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+              if (thumbLeft != null && thumbW != null)
+                Positioned(
+                  top: 0, bottom: 0,
+                  left: thumbLeft,
+                  width: thumbW,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.45),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      }),
+    );
+  }
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 Future<String?> _promptColumnName(BuildContext context) {
@@ -985,7 +1084,14 @@ class _CardKanbanContent extends ConsumerStatefulWidget {
 class _CardKanbanContentState extends ConsumerState<_CardKanbanContent> {
   bool _hideCompleted = false;
   AppTask? _dragging;
+  final _scrollCtrl = ScrollController();
   static final _dateFmt = intl.DateFormat('EEE d MMM');
+
+  @override
+  void dispose() {
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1098,23 +1204,31 @@ class _CardKanbanContentState extends ConsumerState<_CardKanbanContent> {
       if (bucket != null) byCol[bucket]!.add(t);
     }
 
-    return ListView.separated(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-      itemCount: columns.length,
-      separatorBuilder: (_, _) => const SizedBox(width: _kColGap),
-      itemBuilder: (context, i) {
-        final col = columns[i];
-        return _KanbanColumn(
-          key: ValueKey(col.id),
-          column: col,
-          tasks: byCol[col.id] ?? [],
-          cardMap: cardMap,
-          dragging: _dragging,
-          onDragStart: (t) => setState(() => _dragging = t),
-          onDragEnd: () => setState(() => _dragging = null),
-        );
-      },
+    return Column(
+      children: [
+        Expanded(
+          child: ListView.separated(
+            controller: _scrollCtrl,
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            itemCount: columns.length,
+            separatorBuilder: (_, _) => const SizedBox(width: _kColGap),
+            itemBuilder: (context, i) {
+              final col = columns[i];
+              return _KanbanColumn(
+                key: ValueKey(col.id),
+                column: col,
+                tasks: byCol[col.id] ?? [],
+                cardMap: cardMap,
+                dragging: _dragging,
+                onDragStart: (t) => setState(() => _dragging = t),
+                onDragEnd: () => setState(() => _dragging = null),
+              );
+            },
+          ),
+        ),
+        _KanbanScrollbar(controller: _scrollCtrl),
+      ],
     );
   }
 

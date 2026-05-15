@@ -30,7 +30,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -42,6 +42,14 @@ class AppDatabase extends _$AppDatabase {
         onUpgrade: (m, from, to) async {
           if (from < 2) {
             await m.addColumn(tags, tags.color);
+          }
+          if (from < 3) {
+            // Insert "Pending" between "In Progress" and "Done".
+            await customStatement(
+                "UPDATE board_columns SET sort_order = 3 WHERE id = 'col_done'");
+            await customStatement(
+                "INSERT OR IGNORE INTO board_columns (id, title, sort_order) "
+                "VALUES ('col_pending', 'Pending', 2)");
           }
         },
       );
@@ -60,9 +68,14 @@ class AppDatabase extends _$AppDatabase {
           sortOrder: const Value(1),
         ),
         BoardColumnsCompanion.insert(
+          id: 'col_pending',
+          title: 'Pending',
+          sortOrder: const Value(2),
+        ),
+        BoardColumnsCompanion.insert(
           id: 'col_done',
           title: 'Done',
-          sortOrder: const Value(2),
+          sortOrder: const Value(3),
         ),
       ]);
     });
