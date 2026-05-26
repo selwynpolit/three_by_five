@@ -4,6 +4,7 @@ import '../../data/daos/board_columns_dao.dart';
 import '../../data/daos/notes_dao.dart';
 import '../../data/daos/tasks_dao.dart';
 import '../../data/database/app_database.dart';
+import '../../data/repositories/board_columns_repository.dart';
 import '../../data/repositories/task_repository.dart';
 import 'card_providers.dart';
 import 'database_provider.dart';
@@ -17,6 +18,10 @@ TaskRepository taskRepository(TaskRepositoryRef ref) =>
 @Riverpod(keepAlive: true)
 BoardColumnsDao boardColumnsDao(BoardColumnsDaoRef ref) =>
     BoardColumnsDao(ref.watch(appDatabaseProvider));
+
+@Riverpod(keepAlive: true)
+BoardColumnsRepository boardColumnsRepository(BoardColumnsRepositoryRef ref) =>
+    BoardColumnsRepository(ref.watch(boardColumnsDaoProvider));
 
 /// All tasks for a given card, ordered by sort_order then created_at.
 @riverpod
@@ -54,7 +59,7 @@ Stream<List<AppTask>> tasksInDateRange(
 /// Board columns ordered by sort_order.
 @riverpod
 Stream<List<AppBoardColumn>> boardColumns(BoardColumnsRef ref) =>
-    ref.watch(boardColumnsDaoProvider).watchAll();
+    ref.watch(boardColumnsRepositoryProvider).watchAll();
 
 /// Live stream for a single task (used by the detail panel).
 @riverpod

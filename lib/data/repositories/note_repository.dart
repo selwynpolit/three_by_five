@@ -28,4 +28,6 @@ class NoteRepository {
       _dao.update(id, body);
 
   Future<void> delete(String id) => _dao.delete(id);
+
+  Future<void> restore(String id) => _dao.restore(id);
 }

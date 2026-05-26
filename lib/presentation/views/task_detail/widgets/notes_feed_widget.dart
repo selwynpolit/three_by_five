@@ -8,7 +8,9 @@ import 'package:intl/intl.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../data/database/app_database.dart';
+import '../../../../domain/undo/undo_action.dart';
 import '../../../providers/detail_providers.dart';
+import '../../../providers/ui_state_providers.dart';
 import '../../../utils/quill_image_embed.dart';
 import '../../../utils/quill_utils.dart';
 
@@ -80,7 +82,8 @@ class _NoteItemState extends ConsumerState<_NoteItem> {
   bool _editing = false;
   bool _hovered = false;
 
-  static final _timeFmt = DateFormat('d MMM yyyy · h:mm a');
+  static final _timeFmt    = DateFormat('d MMM yyyy · h:mm a');
+  static final _editedFmt  = DateFormat('d MMM yyyy · h:mm a');
 
   static QuillController _parse(String body) =>
       quillControllerFromBody(body, readOnly: true);
@@ -135,6 +138,11 @@ class _NoteItemState extends ConsumerState<_NoteItem> {
 
   Future<void> _delete() async {
     await ref.read(noteRepositoryProvider).delete(widget.note.id);
+    if (mounted) {
+      ref
+          .read(lastUndoActionProvider.notifier)
+          .record(NoteDeleted(noteId: widget.note.id));
+    }
   }
 
   @override
@@ -159,6 +167,16 @@ class _NoteItemState extends ConsumerState<_NoteItem> {
                         fontWeight: FontWeight.w400,
                       ),
                 ),
+                if (widget.note.updatedAt != null) ...[
+                  const SizedBox(width: 8),
+                  Text(
+                    'edited ${_editedFmt.format(widget.note.updatedAt!)}',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: AppColors.textDisabled,
+                          fontStyle: FontStyle.italic,
+                        ),
+                  ),
+                ],
                 const Spacer(),
                 if (!_editing)
                   AnimatedOpacity(

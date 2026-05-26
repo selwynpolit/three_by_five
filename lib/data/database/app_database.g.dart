@@ -1595,6 +1595,17 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, AppTask> {
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _completedAtMeta = const VerificationMeta(
+    'completedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> completedAt = GeneratedColumn<DateTime>(
+    'completed_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _deletedAtMeta = const VerificationMeta(
     'deletedAt',
   );
@@ -1622,6 +1633,7 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, AppTask> {
     sortOrder,
     createdAt,
     updatedAt,
+    completedAt,
     deletedAt,
   ];
   @override
@@ -1736,6 +1748,15 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, AppTask> {
     } else if (isInserting) {
       context.missing(_updatedAtMeta);
     }
+    if (data.containsKey('completed_at')) {
+      context.handle(
+        _completedAtMeta,
+        completedAt.isAcceptableOrUnknown(
+          data['completed_at']!,
+          _completedAtMeta,
+        ),
+      );
+    }
     if (data.containsKey('deleted_at')) {
       context.handle(
         _deletedAtMeta,
@@ -1807,6 +1828,10 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, AppTask> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
       )!,
+      completedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}completed_at'],
+      ),
       deletedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}deleted_at'],
@@ -1847,6 +1872,9 @@ class AppTask extends DataClass implements Insertable<AppTask> {
   final int sortOrder;
   final DateTime createdAt;
   final DateTime updatedAt;
+
+  /// Set when isCompleted becomes true; cleared when the task is uncompleted.
+  final DateTime? completedAt;
   final DateTime? deletedAt;
   const AppTask({
     required this.id,
@@ -1863,6 +1891,7 @@ class AppTask extends DataClass implements Insertable<AppTask> {
     required this.sortOrder,
     required this.createdAt,
     required this.updatedAt,
+    this.completedAt,
     this.deletedAt,
   });
   @override
@@ -1892,6 +1921,9 @@ class AppTask extends DataClass implements Insertable<AppTask> {
     map['sort_order'] = Variable<int>(sortOrder);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || completedAt != null) {
+      map['completed_at'] = Variable<DateTime>(completedAt);
+    }
     if (!nullToAbsent || deletedAt != null) {
       map['deleted_at'] = Variable<DateTime>(deletedAt);
     }
@@ -1924,6 +1956,9 @@ class AppTask extends DataClass implements Insertable<AppTask> {
       sortOrder: Value(sortOrder),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
+      completedAt: completedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(completedAt),
       deletedAt: deletedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(deletedAt),
@@ -1950,6 +1985,7 @@ class AppTask extends DataClass implements Insertable<AppTask> {
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      completedAt: serializer.fromJson<DateTime?>(json['completedAt']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
     );
   }
@@ -1971,6 +2007,7 @@ class AppTask extends DataClass implements Insertable<AppTask> {
       'sortOrder': serializer.toJson<int>(sortOrder),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'completedAt': serializer.toJson<DateTime?>(completedAt),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
     };
   }
@@ -1990,6 +2027,7 @@ class AppTask extends DataClass implements Insertable<AppTask> {
     int? sortOrder,
     DateTime? createdAt,
     DateTime? updatedAt,
+    Value<DateTime?> completedAt = const Value.absent(),
     Value<DateTime?> deletedAt = const Value.absent(),
   }) => AppTask(
     id: id ?? this.id,
@@ -2008,6 +2046,7 @@ class AppTask extends DataClass implements Insertable<AppTask> {
     sortOrder: sortOrder ?? this.sortOrder,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
+    completedAt: completedAt.present ? completedAt.value : this.completedAt,
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
   );
   AppTask copyWithCompanion(TasksCompanion data) {
@@ -2036,6 +2075,9 @@ class AppTask extends DataClass implements Insertable<AppTask> {
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      completedAt: data.completedAt.present
+          ? data.completedAt.value
+          : this.completedAt,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
     );
   }
@@ -2057,6 +2099,7 @@ class AppTask extends DataClass implements Insertable<AppTask> {
           ..write('sortOrder: $sortOrder, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('completedAt: $completedAt, ')
           ..write('deletedAt: $deletedAt')
           ..write(')'))
         .toString();
@@ -2078,6 +2121,7 @@ class AppTask extends DataClass implements Insertable<AppTask> {
     sortOrder,
     createdAt,
     updatedAt,
+    completedAt,
     deletedAt,
   );
   @override
@@ -2098,6 +2142,7 @@ class AppTask extends DataClass implements Insertable<AppTask> {
           other.sortOrder == this.sortOrder &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
+          other.completedAt == this.completedAt &&
           other.deletedAt == this.deletedAt);
 }
 
@@ -2116,6 +2161,7 @@ class TasksCompanion extends UpdateCompanion<AppTask> {
   final Value<int> sortOrder;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
+  final Value<DateTime?> completedAt;
   final Value<DateTime?> deletedAt;
   final Value<int> rowid;
   const TasksCompanion({
@@ -2133,6 +2179,7 @@ class TasksCompanion extends UpdateCompanion<AppTask> {
     this.sortOrder = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.completedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -2151,6 +2198,7 @@ class TasksCompanion extends UpdateCompanion<AppTask> {
     this.sortOrder = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
+    this.completedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -2173,6 +2221,7 @@ class TasksCompanion extends UpdateCompanion<AppTask> {
     Expression<int>? sortOrder,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
+    Expression<DateTime>? completedAt,
     Expression<DateTime>? deletedAt,
     Expression<int>? rowid,
   }) {
@@ -2191,6 +2240,7 @@ class TasksCompanion extends UpdateCompanion<AppTask> {
       if (sortOrder != null) 'sort_order': sortOrder,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
+      if (completedAt != null) 'completed_at': completedAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -2211,6 +2261,7 @@ class TasksCompanion extends UpdateCompanion<AppTask> {
     Value<int>? sortOrder,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
+    Value<DateTime?>? completedAt,
     Value<DateTime?>? deletedAt,
     Value<int>? rowid,
   }) {
@@ -2229,6 +2280,7 @@ class TasksCompanion extends UpdateCompanion<AppTask> {
       sortOrder: sortOrder ?? this.sortOrder,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      completedAt: completedAt ?? this.completedAt,
       deletedAt: deletedAt ?? this.deletedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -2279,6 +2331,9 @@ class TasksCompanion extends UpdateCompanion<AppTask> {
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
+    if (completedAt.present) {
+      map['completed_at'] = Variable<DateTime>(completedAt.value);
+    }
     if (deletedAt.present) {
       map['deleted_at'] = Variable<DateTime>(deletedAt.value);
     }
@@ -2305,6 +2360,7 @@ class TasksCompanion extends UpdateCompanion<AppTask> {
           ..write('sortOrder: $sortOrder, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('completedAt: $completedAt, ')
           ..write('deletedAt: $deletedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -2358,8 +2414,37 @@ class $NotesTable extends Notes with TableInfo<$NotesTable, AppNote> {
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
   @override
-  List<GeneratedColumn> get $columns => [id, taskId, body, createdAt];
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    taskId,
+    body,
+    createdAt,
+    updatedAt,
+    deletedAt,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -2401,6 +2486,18 @@ class $NotesTable extends Notes with TableInfo<$NotesTable, AppNote> {
     } else if (isInserting) {
       context.missing(_createdAtMeta);
     }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
     return context;
   }
 
@@ -2426,6 +2523,14 @@ class $NotesTable extends Notes with TableInfo<$NotesTable, AppNote> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      ),
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
     );
   }
 
@@ -2440,11 +2545,15 @@ class AppNote extends DataClass implements Insertable<AppNote> {
   final String taskId;
   final String body;
   final DateTime createdAt;
+  final DateTime? updatedAt;
+  final DateTime? deletedAt;
   const AppNote({
     required this.id,
     required this.taskId,
     required this.body,
     required this.createdAt,
+    this.updatedAt,
+    this.deletedAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -2453,6 +2562,12 @@ class AppNote extends DataClass implements Insertable<AppNote> {
     map['task_id'] = Variable<String>(taskId);
     map['body'] = Variable<String>(body);
     map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || updatedAt != null) {
+      map['updated_at'] = Variable<DateTime>(updatedAt);
+    }
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
     return map;
   }
 
@@ -2462,6 +2577,12 @@ class AppNote extends DataClass implements Insertable<AppNote> {
       taskId: Value(taskId),
       body: Value(body),
       createdAt: Value(createdAt),
+      updatedAt: updatedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(updatedAt),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
     );
   }
 
@@ -2475,6 +2596,8 @@ class AppNote extends DataClass implements Insertable<AppNote> {
       taskId: serializer.fromJson<String>(json['taskId']),
       body: serializer.fromJson<String>(json['body']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
     );
   }
   @override
@@ -2485,6 +2608,8 @@ class AppNote extends DataClass implements Insertable<AppNote> {
       'taskId': serializer.toJson<String>(taskId),
       'body': serializer.toJson<String>(body),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime?>(updatedAt),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
     };
   }
 
@@ -2493,11 +2618,15 @@ class AppNote extends DataClass implements Insertable<AppNote> {
     String? taskId,
     String? body,
     DateTime? createdAt,
+    Value<DateTime?> updatedAt = const Value.absent(),
+    Value<DateTime?> deletedAt = const Value.absent(),
   }) => AppNote(
     id: id ?? this.id,
     taskId: taskId ?? this.taskId,
     body: body ?? this.body,
     createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
   );
   AppNote copyWithCompanion(NotesCompanion data) {
     return AppNote(
@@ -2505,6 +2634,8 @@ class AppNote extends DataClass implements Insertable<AppNote> {
       taskId: data.taskId.present ? data.taskId.value : this.taskId,
       body: data.body.present ? data.body.value : this.body,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
     );
   }
 
@@ -2514,13 +2645,16 @@ class AppNote extends DataClass implements Insertable<AppNote> {
           ..write('id: $id, ')
           ..write('taskId: $taskId, ')
           ..write('body: $body, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, taskId, body, createdAt);
+  int get hashCode =>
+      Object.hash(id, taskId, body, createdAt, updatedAt, deletedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2528,7 +2662,9 @@ class AppNote extends DataClass implements Insertable<AppNote> {
           other.id == this.id &&
           other.taskId == this.taskId &&
           other.body == this.body &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.deletedAt == this.deletedAt);
 }
 
 class NotesCompanion extends UpdateCompanion<AppNote> {
@@ -2536,12 +2672,16 @@ class NotesCompanion extends UpdateCompanion<AppNote> {
   final Value<String> taskId;
   final Value<String> body;
   final Value<DateTime> createdAt;
+  final Value<DateTime?> updatedAt;
+  final Value<DateTime?> deletedAt;
   final Value<int> rowid;
   const NotesCompanion({
     this.id = const Value.absent(),
     this.taskId = const Value.absent(),
     this.body = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   NotesCompanion.insert({
@@ -2549,6 +2689,8 @@ class NotesCompanion extends UpdateCompanion<AppNote> {
     required String taskId,
     required String body,
     required DateTime createdAt,
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        taskId = Value(taskId),
@@ -2559,6 +2701,8 @@ class NotesCompanion extends UpdateCompanion<AppNote> {
     Expression<String>? taskId,
     Expression<String>? body,
     Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<DateTime>? deletedAt,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -2566,6 +2710,8 @@ class NotesCompanion extends UpdateCompanion<AppNote> {
       if (taskId != null) 'task_id': taskId,
       if (body != null) 'body': body,
       if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (deletedAt != null) 'deleted_at': deletedAt,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2575,6 +2721,8 @@ class NotesCompanion extends UpdateCompanion<AppNote> {
     Value<String>? taskId,
     Value<String>? body,
     Value<DateTime>? createdAt,
+    Value<DateTime?>? updatedAt,
+    Value<DateTime?>? deletedAt,
     Value<int>? rowid,
   }) {
     return NotesCompanion(
@@ -2582,6 +2730,8 @@ class NotesCompanion extends UpdateCompanion<AppNote> {
       taskId: taskId ?? this.taskId,
       body: body ?? this.body,
       createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      deletedAt: deletedAt ?? this.deletedAt,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2601,6 +2751,12 @@ class NotesCompanion extends UpdateCompanion<AppNote> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2614,6 +2770,8 @@ class NotesCompanion extends UpdateCompanion<AppNote> {
           ..write('taskId: $taskId, ')
           ..write('body: $body, ')
           ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -5371,6 +5529,7 @@ typedef $$TasksTableCreateCompanionBuilder =
       Value<int> sortOrder,
       required DateTime createdAt,
       required DateTime updatedAt,
+      Value<DateTime?> completedAt,
       Value<DateTime?> deletedAt,
       Value<int> rowid,
     });
@@ -5390,6 +5549,7 @@ typedef $$TasksTableUpdateCompanionBuilder =
       Value<int> sortOrder,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
+      Value<DateTime?> completedAt,
       Value<DateTime?> deletedAt,
       Value<int> rowid,
     });
@@ -5555,6 +5715,11 @@ class $$TasksTableFilterComposer extends Composer<_$AppDatabase, $TasksTable> {
 
   ColumnFilters<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get completedAt => $composableBuilder(
+    column: $table.completedAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5754,6 +5919,11 @@ class $$TasksTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<DateTime> get completedAt => $composableBuilder(
+    column: $table.completedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
     column: $table.deletedAt,
     builder: (column) => ColumnOrderings(column),
@@ -5858,6 +6028,11 @@ class $$TasksTableAnnotationComposer
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get completedAt => $composableBuilder(
+    column: $table.completedAt,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get deletedAt =>
       $composableBuilder(column: $table.deletedAt, builder: (column) => column);
@@ -6032,6 +6207,7 @@ class $$TasksTableTableManager
                 Value<int> sortOrder = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
+                Value<DateTime?> completedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => TasksCompanion(
@@ -6049,6 +6225,7 @@ class $$TasksTableTableManager
                 sortOrder: sortOrder,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
+                completedAt: completedAt,
                 deletedAt: deletedAt,
                 rowid: rowid,
               ),
@@ -6068,6 +6245,7 @@ class $$TasksTableTableManager
                 Value<int> sortOrder = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
+                Value<DateTime?> completedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => TasksCompanion.insert(
@@ -6085,6 +6263,7 @@ class $$TasksTableTableManager
                 sortOrder: sortOrder,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
+                completedAt: completedAt,
                 deletedAt: deletedAt,
                 rowid: rowid,
               ),
@@ -6249,6 +6428,8 @@ typedef $$NotesTableCreateCompanionBuilder =
       required String taskId,
       required String body,
       required DateTime createdAt,
+      Value<DateTime?> updatedAt,
+      Value<DateTime?> deletedAt,
       Value<int> rowid,
     });
 typedef $$NotesTableUpdateCompanionBuilder =
@@ -6257,6 +6438,8 @@ typedef $$NotesTableUpdateCompanionBuilder =
       Value<String> taskId,
       Value<String> body,
       Value<DateTime> createdAt,
+      Value<DateTime?> updatedAt,
+      Value<DateTime?> deletedAt,
       Value<int> rowid,
     });
 
@@ -6302,6 +6485,16 @@ class $$NotesTableFilterComposer extends Composer<_$AppDatabase, $NotesTable> {
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -6353,6 +6546,16 @@ class $$NotesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$TasksTableOrderingComposer get taskId {
     final $$TasksTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -6394,6 +6597,12 @@ class $$NotesTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
 
   $$TasksTableAnnotationComposer get taskId {
     final $$TasksTableAnnotationComposer composer = $composerBuilder(
@@ -6451,12 +6660,16 @@ class $$NotesTableTableManager
                 Value<String> taskId = const Value.absent(),
                 Value<String> body = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime?> updatedAt = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => NotesCompanion(
                 id: id,
                 taskId: taskId,
                 body: body,
                 createdAt: createdAt,
+                updatedAt: updatedAt,
+                deletedAt: deletedAt,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -6465,12 +6678,16 @@ class $$NotesTableTableManager
                 required String taskId,
                 required String body,
                 required DateTime createdAt,
+                Value<DateTime?> updatedAt = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => NotesCompanion.insert(
                 id: id,
                 taskId: taskId,
                 body: body,
                 createdAt: createdAt,
+                updatedAt: updatedAt,
+                deletedAt: deletedAt,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

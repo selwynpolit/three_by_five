@@ -37,6 +37,8 @@ class Tasks extends Table {
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
+  /// Set when isCompleted becomes true; cleared when the task is uncompleted.
+  DateTimeColumn get completedAt => dateTime().nullable()();
   DateTimeColumn get deletedAt => dateTime().nullable()();
 
   @override

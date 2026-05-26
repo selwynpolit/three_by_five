@@ -7,7 +7,7 @@ class NotesDao {
 
   Stream<List<AppNote>> watchByTask(String taskId) =>
       (_db.select(_db.notes)
-            ..where((n) => n.taskId.equals(taskId))
+            ..where((n) => n.taskId.equals(taskId) & n.deletedAt.isNull())
             ..orderBy([(n) => OrderingTerm.asc(n.createdAt)]))
           .watch();
 
@@ -15,9 +15,18 @@ class NotesDao {
       _db.into(_db.notes).insert(entry);
 
   Future<void> update(String id, String body) =>
-      (_db.update(_db.notes)..where((n) => n.id.equals(id)))
-          .write(NotesCompanion(body: Value(body)));
+      (_db.update(_db.notes)..where((n) => n.id.equals(id))).write(
+        NotesCompanion(
+          body: Value(body),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
 
   Future<void> delete(String id) =>
-      (_db.delete(_db.notes)..where((n) => n.id.equals(id))).go();
+      (_db.update(_db.notes)..where((n) => n.id.equals(id)))
+          .write(NotesCompanion(deletedAt: Value(DateTime.now())));
+
+  Future<void> restore(String id) =>
+      (_db.update(_db.notes)..where((n) => n.id.equals(id)))
+          .write(const NotesCompanion(deletedAt: Value(null)));
 }

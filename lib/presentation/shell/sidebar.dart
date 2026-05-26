@@ -6,6 +6,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../domain/enums/app_view.dart';
 import '../providers/canvas_providers.dart';
+import '../providers/export_providers.dart';
 import '../providers/stack_providers.dart';
 import '../providers/ui_state_providers.dart';
 import 'app_view_x.dart';
@@ -147,7 +148,14 @@ class Sidebar extends ConsumerWidget {
             ),
           ),
 
-          const SizedBox(height: 16),
+          // ── Settings gear ──────────────────────────────────────────────────
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 14),
+            child: Divider(height: 1),
+          ),
+          const SizedBox(height: 4),
+          _SettingsRow(),
+          const SizedBox(height: 8),
         ],
       ),
     );
@@ -559,6 +567,53 @@ class _ViewNavItemState extends State<_ViewNavItem> {
                       fontWeight: widget.isSelected
                           ? FontWeight.w600
                           : FontWeight.w400,
+                    ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Settings row ──────────────────────────────────────────────────────────────
+
+class _SettingsRow extends ConsumerStatefulWidget {
+  @override
+  ConsumerState<_SettingsRow> createState() => _SettingsRowState();
+}
+
+class _SettingsRowState extends ConsumerState<_SettingsRow> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: () =>
+            ref.read(settingsPanelVisibleProvider.notifier).state = true,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          decoration: BoxDecoration(
+            color: _hovered ? AppColors.sidebarHover : Colors.transparent,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.settings_outlined,
+                  size: 15, color: AppColors.textSecondary),
+              const SizedBox(width: 10),
+              Text(
+                'Settings',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w400,
                     ),
               ),
             ],

@@ -64,6 +64,15 @@ dependencies:
   # Voice input
   speech_to_text: ^6.6.2
 
+  # In-app help (markdown rendering)
+  flutter_markdown: ^0.7.4
+
+  # ZIP assembly for data export and backup
+  archive: ^3.4.0
+
+  # SHA-256 checksums for backup integrity
+  crypto: ^3.0.3
+
   # Utilities
   collection: ^1.18.0
   cupertino_icons: ^1.0.8
@@ -80,3 +89,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  assets:
+    - docs/

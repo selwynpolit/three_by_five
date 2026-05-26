@@ -139,7 +139,7 @@ class _KanbanViewState extends ConsumerState<KanbanView> {
   Future<void> _addColumn() async {
     final name = await _promptColumnName(context);
     if (name == null || name.isEmpty || !mounted) return;
-    await ref.read(boardColumnsDaoProvider).create(name);
+    await ref.read(boardColumnsRepositoryProvider).create(name);
   }
 }
 
@@ -376,8 +376,8 @@ class _KanbanColumnState extends ConsumerState<_KanbanColumn> {
     final text = _titleCtrl.text.trim();
     setState(() => _editingTitle = false);
     if (text.isNotEmpty && text != widget.column.title) {
-      final dao = ref.read(boardColumnsDaoProvider);
-      await dao.rename(widget.column.id, text);
+      final repo = ref.read(boardColumnsRepositoryProvider);
+      await repo.rename(widget.column.id, text);
     } else {
       _titleCtrl.text = widget.column.title;
     }
@@ -405,7 +405,7 @@ class _KanbanColumnState extends ConsumerState<_KanbanColumn> {
       ),
     );
     if (confirmed == true && mounted) {
-      await ref.read(boardColumnsDaoProvider).delete(widget.column.id);
+      await ref.read(boardColumnsRepositoryProvider).delete(widget.column.id);
     }
   }
 

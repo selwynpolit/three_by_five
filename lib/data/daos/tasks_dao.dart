@@ -59,13 +59,16 @@ class TasksDao {
         ),
       );
 
-  Future<void> markComplete(String id, {required bool completed}) =>
-      (_db.update(_db.tasks)..where((t) => t.id.equals(id))).write(
-        TasksCompanion(
-          isCompleted: Value(completed),
-          updatedAt: Value(DateTime.now()),
-        ),
-      );
+  Future<void> markComplete(String id, {required bool completed}) {
+    final now = DateTime.now();
+    return (_db.update(_db.tasks)..where((t) => t.id.equals(id))).write(
+      TasksCompanion(
+        isCompleted: Value(completed),
+        completedAt: completed ? Value(now) : const Value(null),
+        updatedAt: Value(now),
+      ),
+    );
+  }
 
   Future<void> updateDueDate(String id, DateTime? dueDate) =>
       (_db.update(_db.tasks)..where((t) => t.id.equals(id))).write(

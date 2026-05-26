@@ -50,7 +50,7 @@ class SearchDao {
       FROM notes n
       INNER JOIN notes_fts ON notes_fts.rowid = n.rowid
       INNER JOIN tasks t ON t.id = n.task_id
-      WHERE notes_fts MATCH ? AND t.deleted_at IS NULL
+      WHERE notes_fts MATCH ? AND t.deleted_at IS NULL AND n.deleted_at IS NULL
       ORDER BY rank
       LIMIT 50
       ''',

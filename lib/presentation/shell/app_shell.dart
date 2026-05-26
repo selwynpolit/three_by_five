@@ -8,7 +8,6 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_colors.dart';
-import '../../data/daos/settings_dao.dart';
 import '../../domain/enums/app_view.dart';
 import '../providers/canvas_providers.dart';
 import '../providers/card_providers.dart';
@@ -22,7 +21,16 @@ import '../views/card_view/card_view.dart';
 import '../views/kanban_view/kanban_view.dart';
 import '../views/task_detail/task_detail_panel.dart';
 import '../views/today_view/today_view.dart';
+import '../providers/backup_providers.dart';
+import '../widgets/about_dialog.dart';
+import '../providers/export_providers.dart';
+import '../providers/help_providers.dart';
+import '../widgets/backup_panel.dart';
+import '../widgets/export_panel.dart';
+import '../widgets/help_panel.dart';
+import '../widgets/restore_panel.dart';
 import '../widgets/search_overlay.dart';
+import '../widgets/settings_panel.dart';
 import '../widgets/undo_toast.dart';
 import 'sidebar.dart';
 
@@ -67,10 +75,13 @@ class _ShellReadyState extends ConsumerState<_ShellReady> {
     _resurfaceTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       if (mounted) ref.invalidate(cardsProvider);
     });
-    // Global ESC handler — fires before any widget's onKeyEvent so it
-    // works even when a Quill editor or nested CallbackShortcuts would
-    // otherwise consume the key.
     HardwareKeyboard.instance.addHandler(_globalKeyHandler);
+    // Schedule automatic backup check after first frame — runs silently.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ref.read(backupServiceProvider).scheduleAutomaticBackupIfDue().ignore();
+      }
+    });
   }
 
   @override
@@ -81,10 +92,47 @@ class _ShellReadyState extends ConsumerState<_ShellReady> {
   }
 
   bool _globalKeyHandler(KeyEvent event) {
-    if (event is KeyDownEvent &&
-        event.logicalKey == LogicalKeyboardKey.escape) {
+    if (event is! KeyDownEvent) return false;
+
+    // ⌘⇧B — create backup.
+    if (event.logicalKey == LogicalKeyboardKey.keyB &&
+        HardwareKeyboard.instance.isMetaPressed &&
+        HardwareKeyboard.instance.isShiftPressed) {
+      if (mounted) {
+        ref.read(backupNotifierProvider.notifier).reset();
+        ref.read(backupPanelVisibleProvider.notifier).state = true;
+      }
+      return true;
+    }
+
+    // ⌘⇧E — open export panel.
+    if (event.logicalKey == LogicalKeyboardKey.keyE &&
+        HardwareKeyboard.instance.isMetaPressed &&
+        HardwareKeyboard.instance.isShiftPressed) {
+      if (mounted) {
+        ref.read(exportNotifierProvider.notifier).reset();
+        ref.read(exportPanelVisibleProvider.notifier).state = true;
+      }
+      return true;
+    }
+
+    // ⌘? — toggle help panel (also handled via PlatformMenuBar Help menu).
+    if (event.logicalKey == LogicalKeyboardKey.question &&
+        HardwareKeyboard.instance.isMetaPressed) {
+      if (mounted) {
+        final visible = ref.read(helpPanelVisibleProvider);
+        ref.read(helpPanelVisibleProvider.notifier).state = !visible;
+      }
+      return true;
+    }
+
+    // ESC — close help panel first, then task detail.
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
+      if (mounted && ref.read(helpPanelVisibleProvider)) {
+        ref.read(helpPanelVisibleProvider.notifier).state = false;
+        return true;
+      }
       // Search overlay has its own handler (added later, fires first).
-      // Here we only handle closing the task detail panel.
       if (mounted && ref.read(selectedTaskIdProvider) != null) {
         ref.read(selectedTaskIdProvider.notifier).select(null);
         return true;
@@ -103,8 +151,19 @@ class _ShellReadyState extends ConsumerState<_ShellReady> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(showAboutDialogProvider, (_, show) {
+      if (show) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            showThreeByFiveAboutDialog(context);
+            ref.read(showAboutDialogProvider.notifier).state = false;
+          }
+        });
+      }
+    });
+
     ref.listen(activeStackIdProvider, (_, next) {
-      final dao = SettingsDao(ref.read(appDatabaseProvider));
+      final dao = ref.read(settingsDaoProvider);
       if (next != null) {
         dao.set(AppConstants.kActiveStackId, next);
       } else {
@@ -113,7 +172,7 @@ class _ShellReadyState extends ConsumerState<_ShellReady> {
     });
 
     ref.listen(hiddenStackIdsProvider, (_, next) {
-      final dao = SettingsDao(ref.read(appDatabaseProvider));
+      final dao = ref.read(settingsDaoProvider);
       if (next.isEmpty) {
         dao.remove('hiddenStackIds');
       } else {
@@ -123,8 +182,7 @@ class _ShellReadyState extends ConsumerState<_ShellReady> {
 
     // Persist card layout so it survives app restarts.
     ref.listen(lastCardLayoutModeProvider, (_, next) {
-      final dao = SettingsDao(ref.read(appDatabaseProvider));
-      dao.set('cardLayoutMode', next.index.toString());
+      ref.read(settingsDaoProvider).set('cardLayoutMode', next.index.toString());
     });
 
     // When navigating back to card view, restore the last card layout
@@ -168,6 +226,8 @@ class _ShellReadyState extends ConsumerState<_ShellReady> {
               () => switchView(AppView.todayView),
           const SingleActivator(LogicalKeyboardKey.digit5, meta: true):
               () => switchView(AppView.archiveView),
+          const SingleActivator(LogicalKeyboardKey.digit6, meta: true):
+              () => switchView(AppView.allCardsView),
           // ESC is handled exclusively by HardwareKeyboard.addHandler in
           // app_shell + task_detail_panel — removing it from CallbackShortcuts
           // prevents it from bypassing the panel's save-dialog interception.
@@ -244,6 +304,26 @@ class _ShellReadyState extends ConsumerState<_ShellReady> {
 
               // ── Global search overlay ────────────────────────────
               if (searchVisible) const SearchOverlay(),
+
+              // ── Settings panel overlay ────────────────────────────
+              if (ref.watch(settingsPanelVisibleProvider))
+                const SettingsPanelOverlay(),
+
+              // ── Backup panel overlay ──────────────────────────────
+              if (ref.watch(backupPanelVisibleProvider))
+                const BackupPanelOverlay(),
+
+              // ── Restore panel overlay ─────────────────────────────
+              if (ref.watch(restorePanelVisibleProvider))
+                const RestorePanelOverlay(),
+
+              // ── Export panel overlay ──────────────────────────────
+              if (ref.watch(exportPanelVisibleProvider))
+                const ExportPanelOverlay(),
+
+              // ── Help panel overlay ────────────────────────────────
+              if (ref.watch(helpPanelVisibleProvider))
+                const HelpPanelOverlay(),
 
               // ── Detail panel (slides from right) ─────────────────
               Positioned(

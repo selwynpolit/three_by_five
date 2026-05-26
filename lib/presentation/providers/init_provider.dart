@@ -1,6 +1,9 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:drift/drift.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../core/constants/app_constants.dart';
@@ -19,6 +22,9 @@ part 'init_provider.g.dart';
 /// use as the initial active stack (non-null once the database is ready).
 @Riverpod(keepAlive: true)
 Future<String?> appInit(AppInitRef ref) async {
+  // Clean up any .old files left from a previous restore (best-effort).
+  _cleanupRestoreArtifacts();
+
   final db = ref.watch(appDatabaseProvider);
   final stacksDao = StacksDao(db);
   final settingsDao = SettingsDao(db);
@@ -68,6 +74,17 @@ Future<String?> appInit(AppInitRef ref) async {
   });
 
   return stackId;
+}
+
+Future<void> _cleanupRestoreArtifacts() async {
+  try {
+    final docsDir = await getApplicationDocumentsDirectory();
+    final oldDb = File(p.join(docsDir.path, 'three_by_five.sqlite.old'));
+    if (await oldDb.exists()) await oldDb.delete();
+    final supportDir = await getApplicationSupportDirectory();
+    final oldImages = Directory(p.join(supportDir.path, 'attachments.old'));
+    if (await oldImages.exists()) await oldImages.delete(recursive: true);
+  } catch (_) {}
 }
 
 Future<void> _provisionDefaults(AppDatabase db) async {

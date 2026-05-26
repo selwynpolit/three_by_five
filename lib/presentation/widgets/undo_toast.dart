@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_colors.dart';
 import '../../domain/undo/undo_action.dart';
 import '../providers/card_providers.dart';
+import '../providers/detail_providers.dart';
 import '../providers/task_providers.dart';
 import '../providers/ui_state_providers.dart';
 
@@ -86,6 +87,8 @@ class _UndoToastState extends ConsumerState<UndoToast>
         await cards.restore(cardId);
       case CardDeleted(:final cardId):
         await cards.restore(cardId);
+      case NoteDeleted(:final noteId):
+        await ref.read(noteRepositoryProvider).restore(noteId);
     }
   }
 
@@ -97,6 +100,7 @@ class _UndoToastState extends ConsumerState<UndoToast>
         CardSnoozed() => 'Card snoozed',
         CardArchived() => 'Card archived',
         CardDeleted() => 'Card deleted',
+        NoteDeleted() => 'Note deleted',
       };
 
   @override

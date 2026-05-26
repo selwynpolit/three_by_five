@@ -40,6 +40,25 @@ final boardColumnsDaoProvider = Provider<BoardColumnsDao>.internal(
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef BoardColumnsDaoRef = ProviderRef<BoardColumnsDao>;
+String _$boardColumnsRepositoryHash() =>
+    r'b248547ff5f23b1a29ac727b080514296708debc';
+
+/// See also [boardColumnsRepository].
+@ProviderFor(boardColumnsRepository)
+final boardColumnsRepositoryProvider =
+    Provider<BoardColumnsRepository>.internal(
+      boardColumnsRepository,
+      name: r'boardColumnsRepositoryProvider',
+      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+          ? null
+          : _$boardColumnsRepositoryHash,
+      dependencies: null,
+      allTransitiveDependencies: null,
+    );
+
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+typedef BoardColumnsRepositoryRef = ProviderRef<BoardColumnsRepository>;
 String _$tasksForCardHash() => r'adc2a31d704a33109200c30b5584d4e3bde22c79';
 
 /// Copied from Dart SDK
@@ -523,7 +542,7 @@ class _TasksInDateRangeProviderElement
   DateTime get end => (origin as TasksInDateRangeProvider).end;
 }
 
-String _$boardColumnsHash() => r'01ee0b9062407b41c03f065dc8fb963d4e15c0ed';
+String _$boardColumnsHash() => r'9dd9f4fa6d5ea3881ba8799778814973e3bf5210';
 
 /// Board columns ordered by sort_order.
 ///

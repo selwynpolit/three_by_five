@@ -257,41 +257,49 @@ class _DragRowState extends State<_DragRow> {
   bool _hovered = false;
 
   Widget _buildRow({bool ghost = false}) {
-    return Opacity(
-      opacity: ghost ? 0.25 : 1.0,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Drag handle — only takes layout space when hovered.
-          Visibility(
-            visible: _hovered && !ghost,
-            maintainSize: false,
-            maintainAnimation: false,
-            maintainState: false,
-            child: const Padding(
-              padding: EdgeInsets.only(top: 5, right: 2),
-              child: MouseRegion(
-                cursor: SystemMouseCursors.grab,
-                child: Icon(
-                  Icons.drag_indicator,
-                  size: 12,
-                  color: AppColors.textTertiary,
+    final showHandle = _hovered && !ghost;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 120),
+      decoration: BoxDecoration(
+        color: showHandle
+            ? AppColors.accent.withValues(alpha: 0.05)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Opacity(
+        opacity: ghost ? 0.25 : 1.0,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Drag handle — space always reserved, fades in on hover.
+            AnimatedOpacity(
+              opacity: showHandle ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 120),
+              child: const Padding(
+                padding: EdgeInsets.only(top: 5, right: 2),
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.grab,
+                  child: Icon(
+                    Icons.drag_indicator,
+                    size: 12,
+                    color: AppColors.textTertiary,
+                  ),
                 ),
               ),
             ),
-          ),
-          Expanded(
-            child: Tooltip(
-              message: widget.task.title,
-              waitDuration: const Duration(milliseconds: 600),
-              preferBelow: false,
-              child: TaskRowWidget(
-                task: widget.task,
-                isHidden: widget.isHidden,
+            Expanded(
+              child: Tooltip(
+                message: widget.task.title,
+                waitDuration: const Duration(milliseconds: 600),
+                preferBelow: false,
+                child: TaskRowWidget(
+                  task: widget.task,
+                  isHidden: widget.isHidden,
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

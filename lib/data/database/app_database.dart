@@ -30,7 +30,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -50,6 +50,13 @@ class AppDatabase extends _$AppDatabase {
             await customStatement(
                 "INSERT OR IGNORE INTO board_columns (id, title, sort_order) "
                 "VALUES ('col_pending', 'Pending', 2)");
+          }
+          if (from < 4) {
+            await m.addColumn(tasks, tasks.completedAt);
+          }
+          if (from < 5) {
+            await m.addColumn(notes, notes.updatedAt);
+            await m.addColumn(notes, notes.deletedAt);
           }
         },
       );

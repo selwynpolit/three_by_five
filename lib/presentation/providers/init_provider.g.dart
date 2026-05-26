@@ -6,7 +6,7 @@ part of 'init_provider.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$appInitHash() => r'6e68748d78682c999c5ae2df5920a47295400407';
+String _$appInitHash() => r'92646410d15db489f4fa4b985a056f5d63837051';
 
 /// Ensures the database has at least one stack (provisions demo data on first
 /// launch) then restores the last-used view state.  Returns the stack ID to

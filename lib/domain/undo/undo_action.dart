@@ -19,6 +19,13 @@ final class TaskDeleted extends UndoAction {
   final String taskId;
 }
 
+// ── Note actions ──────────────────────────────────────────────────────────────
+
+final class NoteDeleted extends UndoAction {
+  const NoteDeleted({required this.noteId});
+  final String noteId;
+}
+
 // ── Card actions ──────────────────────────────────────────────────────────────
 
 final class CardArchived extends UndoAction {

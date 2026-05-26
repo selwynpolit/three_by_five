@@ -183,15 +183,9 @@ class _TaskRowWidgetState extends ConsumerState<TaskRowWidget>
               ),
             ),
           ),
-          // ── Due-date dot ───────────────────────────────────────
-          if (task.dueDate != null) ...[
-            const SizedBox(width: 4),
-            _DueDot(task.dueDate!),
-          ] else
-            const SizedBox(width: 7),
+          const SizedBox(width: 6),
 
           // ── Title ─────────────────────────────────────────────
-          if (task.dueDate != null) const SizedBox(width: 4),
           Expanded(
             child: Text(
               task.title,
@@ -232,6 +226,19 @@ class _TaskRowWidgetState extends ConsumerState<TaskRowWidget>
             ),
           ],
 
+          // Due-date icon — calendar icon coloured by urgency.
+          if (task.dueDate != null && !task.isCompleted) ...[
+            const SizedBox(width: 3),
+            Padding(
+              padding: const EdgeInsets.only(top: 5),
+              child: Icon(
+                Icons.event,
+                size: 11,
+                color: _dueDateColor(task.dueDate!),
+              ),
+            ),
+          ],
+
           // Note indicator — pencil icon when task has notes/attachments.
           if (hasRichContent && !task.isCompleted) ...[
             const SizedBox(width: 3),
@@ -250,31 +257,15 @@ class _TaskRowWidgetState extends ConsumerState<TaskRowWidget>
   }
 }
 
-// ── Due-date dot ─────────────────────────────────────────────────────────────
+// ── Due-date colour helper ────────────────────────────────────────────────────
 
-class _DueDot extends StatelessWidget {
-  const _DueDot(this.date);
-  final DateTime date;
-
-  @override
-  Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final day = DateTime(date.year, date.month, date.day);
-    final color = day.isBefore(today)
-        ? AppColors.overdueText
-        : day == today
-            ? AppColors.dueTodayText
-            : AppColors.dueFutureText;
-    return Padding(
-      padding: const EdgeInsets.only(top: 6),
-      child: Container(
-        width: 6,
-        height: 6,
-        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-      ),
-    );
-  }
+Color _dueDateColor(DateTime date) {
+  final today = DateTime.now();
+  final d = DateTime(date.year, date.month, date.day);
+  final t = DateTime(today.year, today.month, today.day);
+  if (d.isBefore(t)) return AppColors.overdueText;
+  if (d == t) return AppColors.dueTodayText;
+  return AppColors.dueFutureText;
 }
 
 // ── Priority dot ──────────────────────────────────────────────────────────────
