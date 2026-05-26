@@ -24,4 +24,14 @@ abstract final class AppSpacing {
   static const double taskRowMinHeight = 34;
   static const double checkboxSize = 18;
   static const double columnHeaderHeight = 26;
+
+  // ── Zoom-scaling anchors (multiply by zoom scale factor) ─────────────────────
+  /// Fixed height of each task row cell in the card column.
+  static const double taskRowHeight = 22.0;
+  /// Height of one task slot (row + inactive drop zone = 26px).
+  static const double taskCellHeight = 26.0;
+  /// Total fixed slot area for 6 task rows (6 × taskCellHeight).
+  static const double taskRowSlotHeight = 156.0;
+  /// Height of the "Add Now / Add Later" bar at the card bottom.
+  static const double addTaskBarHeight = 26.0;
 }

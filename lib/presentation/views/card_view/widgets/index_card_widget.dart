@@ -14,6 +14,7 @@ import '../../../providers/card_providers.dart';
 import '../../../providers/stack_providers.dart';
 import '../../../providers/task_providers.dart';
 import '../../../providers/ui_state_providers.dart';
+import '../../../widgets/zoom_indicator.dart';
 import '../../kanban_view/kanban_view.dart' show showCardKanbanDialog;
 import 'card_column_widget.dart';
 
@@ -253,13 +254,15 @@ class _IndexCardWidgetState extends ConsumerState<IndexCardWidget> {
       borderWidth = 0.5;
     }
 
+    final scale = CardZoomData.of(context);
+
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
-        width: AppSpacing.cardWidth,
+        width: AppSpacing.cardWidth * scale,
         decoration: BoxDecoration(
           color: (_isHiddenOrSnoozed || _isArchived)
               ? AppColors.cardSurface.withValues(alpha: 0.6)
@@ -273,7 +276,11 @@ class _IndexCardWidgetState extends ConsumerState<IndexCardWidget> {
           boxShadow:
               _hovered ? AppShadows.cardHover : AppShadows.card,
         ),
-        child: Column(
+        child: MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(scale),
+          ),
+          child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -338,6 +345,7 @@ class _IndexCardWidgetState extends ConsumerState<IndexCardWidget> {
                                   ? const Color(0xFFCFDFE8)
                                       .withValues(alpha: 0.5)
                                   : const Color(0xFFCFDFE8),
+                              spacing: AppSpacing.taskCellHeight * scale,
                             ),
                           ),
                         ),
@@ -392,7 +400,8 @@ class _IndexCardWidgetState extends ConsumerState<IndexCardWidget> {
               },
             ),
           ],
-        ),
+          ),   // Column
+        ),     // MediaQuery
       ),
     );
   }
@@ -523,6 +532,8 @@ class _CardHeaderState extends State<_CardHeader> {
         ? const Color(0x14000000) // subtle black tint
         : Colors.transparent;
 
+    final scale = CardZoomData.of(context);
+
     return Listener(
       behavior: HitTestBehavior.opaque,
       onPointerDown: (event) {
@@ -540,18 +551,18 @@ class _CardHeaderState extends State<_CardHeader> {
         children: [
           // Colored accent strip
           Container(
-            height: 3,
+            height: 3 * scale,
             color: widget.stackColor
                 .withValues(alpha: widget.isHiddenOrArchived ? 0.3 : 0.7),
           ),
 
           // Date + title area
           Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.cardPadding,
-              10,
-              AppSpacing.cardPadding,
-              8,
+            padding: EdgeInsets.fromLTRB(
+              AppSpacing.cardPadding * scale,
+              10 * scale,
+              AppSpacing.cardPadding * scale,
+              8 * scale,
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -576,7 +587,7 @@ class _CardHeaderState extends State<_CardHeader> {
                               ),
                             ),
                           ),
-                          const SizedBox(height: 2),
+                          SizedBox(height: 2 * scale),
                           // Project title — double-click to edit
                           if (_editingTitle)
                             CallbackShortcuts(
@@ -666,7 +677,7 @@ class _CardHeaderState extends State<_CardHeader> {
 
                 // Status badge (hidden / snoozed / archived)
                 if (isArchived || isHidden || isSnoozed) ...[
-                  const SizedBox(height: 5),
+                  SizedBox(height: 5 * scale),
                   _StatusBadge(
                     label: isArchived
                         ? 'Archived'
@@ -683,8 +694,9 @@ class _CardHeaderState extends State<_CardHeader> {
           // Stack name pill — only shown when viewing multiple stacks
           if (widget.stackName != null)
             Padding(
-              padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.cardPadding, 0, AppSpacing.cardPadding, 8),
+              padding: EdgeInsets.fromLTRB(
+                  AppSpacing.cardPadding * scale, 0,
+                  AppSpacing.cardPadding * scale, 8 * scale),
               child: Row(
                 children: [
                   Container(
@@ -831,16 +843,17 @@ class _AddTaskBarState extends ConsumerState<_AddTaskBar> {
 
   @override
   Widget build(BuildContext context) {
+    final scale = CardZoomData.of(context);
     if (_adding) {
       return Container(
-        height: 26,
+        height: AppSpacing.addTaskBarHeight * scale,
         decoration: const BoxDecoration(
           border: Border(
               top: BorderSide(color: AppColors.divider, width: 0.5)),
           color: AppColors.accentLight,
         ),
         padding:
-            const EdgeInsets.symmetric(horizontal: AppSpacing.cardPadding),
+            EdgeInsets.symmetric(horizontal: AppSpacing.cardPadding * scale),
         child: Row(
           children: [
             Icon(Icons.add, size: 12, color: AppColors.accent),
@@ -882,7 +895,7 @@ class _AddTaskBarState extends ConsumerState<_AddTaskBar> {
       onExit: (_) => setState(() => _hovered = false),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 120),
-        height: 26,
+        height: AppSpacing.addTaskBarHeight * scale,
         decoration: BoxDecoration(
           color: widget.isHidden
               ? Colors.transparent
@@ -969,25 +982,24 @@ class _AddTaskBarState extends ConsumerState<_AddTaskBar> {
 }
 
 class _RuledLines extends CustomPainter {
-  const _RuledLines({required this.color});
+  const _RuledLines({required this.color, required this.spacing});
   final Color color;
-
-  static const double _spacing = 26.0;
+  final double spacing;
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
       ..color = color
       ..strokeWidth = 0.6;
-    var y = _spacing;
+    var y = spacing;
     while (y < size.height) {
       canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
-      y += _spacing;
+      y += spacing;
     }
   }
 
   @override
-  bool shouldRepaint(_RuledLines old) => old.color != color;
+  bool shouldRepaint(_RuledLines old) => old.color != color || old.spacing != spacing;
 }
 
 class _KanbanBadge extends StatelessWidget {

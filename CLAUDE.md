@@ -250,6 +250,11 @@ These are defined and must be maintained:
 | ⌘4 | Today Dashboard |
 | ⌘5 | Archive View |
 | ⌘6 | All Cards View |
+| ⌘+ / ⌘= | Zoom in (Card View) |
+| ⌘- | Zoom out (Card View) |
+| ⌘0 | Reset zoom to 100% (Card View) |
+| Pinch | Continuous zoom (Card View, trackpad) |
+| ⌘+scroll | Step zoom (Card View, trackpad) |
 | Tab / ⇧Tab | Not yet implemented |
 | Space | Not yet implemented |
 | Escape | Close modal or detail panel |
@@ -377,6 +382,10 @@ Recently completed:
 - SettingsDao architecture violation resolved — settingsDaoProvider added
 - BoardColumnsRepository added — direct DAO access removed from kanban view
 - ⌘6 (All Cards View) keyboard shortcut bound
+- Card zoom: pinch, ⌘+/⌘-/⌘0, ⌘+scroll, spring animation, floating pill
+  indicator, persistence via Settings DAO. Scale flows via CardZoomData
+  InheritedWidget. Canvas view excluded (has own InteractiveViewer).
+  Per-display zoom memory deferred — requires native platform channel.
 
 In progress:
 - [Update as work proceeds]
@@ -395,3 +404,4 @@ Known issues:
 - Onboarding not implemented
 - ⌘F not bound (⌘K handles search)
 - Tab/⇧Tab and Space shortcuts not implemented
+- Per-display zoom memory not implemented (needs native platform channel for stable display ID)

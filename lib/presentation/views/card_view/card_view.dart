@@ -3,7 +3,9 @@ import 'dart:math' as math;
 
 import 'package:intl/intl.dart' as intl;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/physics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -18,6 +20,8 @@ import '../../providers/stack_providers.dart';
 import '../../providers/tag_providers.dart';
 import '../../providers/task_providers.dart';
 import '../../providers/ui_state_providers.dart';
+import '../../providers/zoom_providers.dart';
+import '../../widgets/zoom_indicator.dart';
 import 'widgets/index_card_widget.dart';
 
 class CardView extends ConsumerWidget {
@@ -53,7 +57,7 @@ class CardView extends ConsumerWidget {
                   <String, AppStack>{for (final s in list) s.id: s},
               orElse: () => <String, AppStack>{},
             );
-            return switch (layoutMode) {
+            final cardContent = switch (layoutMode) {
               CardLayoutMode.grid =>
                 _GridView(cards: cards, stackMap: stackMap, showStackPill: showStackPill),
               CardLayoutMode.scattered =>
@@ -63,6 +67,9 @@ class CardView extends ConsumerWidget {
               CardLayoutMode.taskList =>
                 const _TaskListView(),
             };
+            // Canvas has its own InteractiveViewer — exclude from zoom capture.
+            if (layoutMode == CardLayoutMode.canvas) return cardContent;
+            return _ZoomedCardArea(child: cardContent);
           }),
         ),
       ],
@@ -281,6 +288,118 @@ class _NewCardButtonState extends ConsumerState<_NewCardButton> {
   }
 }
 
+// ── Zoomed card area ──────────────────────────────────────────────────────────
+// Wraps all non-canvas card layouts. Captures trackpad pinch and ⌘+scroll,
+// runs a spring animation on the AnimationController, and propagates the
+// animated scale via CardZoomData. ZoomIndicator sits above the content.
+
+class _ZoomedCardArea extends ConsumerStatefulWidget {
+  const _ZoomedCardArea({required this.child});
+  final Widget child;
+
+  @override
+  ConsumerState<_ZoomedCardArea> createState() => _ZoomedCardAreaState();
+}
+
+class _ZoomedCardAreaState extends ConsumerState<_ZoomedCardArea>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  bool _gestureActive = false;
+  double _startGestureScale = kDefaultZoom;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      lowerBound: kMinZoom,
+      upperBound: kMaxZoom,
+      value: kDefaultZoom,
+    );
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _animateTo(double target) {
+    final clamped = target.clamp(kMinZoom, kMaxZoom);
+    _ctrl.animateWith(SpringSimulation(
+      const SpringDescription(
+        mass: kZoomSpringMass,
+        stiffness: kZoomSpringStiffness,
+        damping: kZoomSpringDamping,
+      ),
+      _ctrl.value,
+      clamped,
+      0,
+    ));
+  }
+
+  void _onPanZoomStart(PointerPanZoomStartEvent _) {
+    _gestureActive = true;
+    _startGestureScale = _ctrl.value;
+    _ctrl.stop();
+  }
+
+  void _onPanZoomUpdate(PointerPanZoomUpdateEvent ev) {
+    if (!_gestureActive) return;
+    final raw = _startGestureScale * ev.scale;
+    _ctrl.value = raw.clamp(kMinZoom, kMaxZoom);
+    ref.read(cardZoomProvider.notifier).setFromGesture(_ctrl.value);
+  }
+
+  void _onPanZoomEnd(PointerPanZoomEndEvent _) {
+    _gestureActive = false;
+    ref.read(cardZoomProvider.notifier).snapToNearestStep();
+    _animateTo(ref.read(cardZoomProvider));
+  }
+
+  void _onPointerSignal(PointerSignalEvent ev) {
+    if (ev is! PointerScrollEvent) return;
+    if (!HardwareKeyboard.instance.isMetaPressed) return;
+    if (ev.scrollDelta.dy > 0) {
+      ref.read(cardZoomProvider.notifier).zoomOut();
+    } else if (ev.scrollDelta.dy < 0) {
+      ref.read(cardZoomProvider.notifier).zoomIn();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.listen(cardZoomProvider, (_, next) {
+      if (_gestureActive) return;
+      _animateTo(next);
+    });
+
+    return Listener(
+      onPointerSignal: _onPointerSignal,
+      onPointerPanZoomStart: _onPanZoomStart,
+      onPointerPanZoomUpdate: _onPanZoomUpdate,
+      onPointerPanZoomEnd: _onPanZoomEnd,
+      child: AnimatedBuilder(
+        animation: _ctrl,
+        builder: (ctx, child) => Stack(
+          fit: StackFit.expand,
+          children: [
+            CardZoomData(scale: _ctrl.value, child: child!),
+            const Align(
+              alignment: Alignment.topCenter,
+              child: Padding(
+                padding: EdgeInsets.only(top: 12),
+                child: ZoomIndicator(),
+              ),
+            ),
+          ],
+        ),
+        child: widget.child,
+      ),
+    );
+  }
+}
+
 // ── Grid layout ───────────────────────────────────────────────────────────────
 
 class _GridView extends StatelessWidget {
@@ -295,8 +414,8 @@ class _GridView extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(AppSpacing.viewPadding, 0,
           AppSpacing.viewPadding, AppSpacing.viewPadding),
       child: Wrap(
-          spacing: AppSpacing.cardGap,
-          runSpacing: AppSpacing.cardGap,
+          spacing: AppSpacing.cardGap * CardZoomData.of(context),
+          runSpacing: AppSpacing.cardGap * CardZoomData.of(context),
           children: cards
               .map((c) => IndexCardWidget(
                     card: c,
@@ -355,6 +474,7 @@ class _Metrics {
     required this.cardW,
     required this.drawCardLeft,
     required this.discardCardLeft,
+    required this.scale,
   });
 
   final double totalW;
@@ -364,20 +484,18 @@ class _Metrics {
   final double drawLeft;
   final double drawW;
   final double cardW;
-  final double drawCardLeft;    // draw zone card left edge (PIXEL-STABLE)
-  final double discardCardLeft; // discard zone card left edge
+  final double drawCardLeft;
+  final double discardCardLeft;
+  final double scale;
 
-  static _Metrics from(BoxConstraints c) {
+  static _Metrics from(BoxConstraints c, double scale) {
     final totalW = math.min(c.maxWidth, _kMaxTotalWidth);
     final hOffset = (c.maxWidth - totalW) / 2;
     final discardW = totalW * _kDiscardFraction;
     final drawW = totalW * _kDrawFraction;
-    // Draw stack (main) on the LEFT, discard (flipped) on the RIGHT
-    // so the task detail panel doesn't obscure the active card.
     final drawLeft = hOffset;
     final discardLeft = hOffset + drawW + totalW * _kGapFraction;
-    // Card width may be clamped on narrow windows.
-    final cardW = math.min(AppSpacing.cardWidth.toDouble(), drawW - 32.0);
+    final cardW = math.min(AppSpacing.cardWidth.toDouble() * scale, drawW - 32.0);
     return _Metrics(
       totalW: totalW,
       hOffset: hOffset,
@@ -388,19 +506,23 @@ class _Metrics {
       cardW: cardW,
       drawCardLeft: drawLeft + (drawW - cardW) / 2,
       discardCardLeft: discardLeft + (discardW - cardW) / 2,
+      scale: scale,
     );
   }
 
   Offset get drawCardCenter =>
-      Offset(drawCardLeft + cardW / 2, _kCardTopPad + _kCardBackH / 2);
+      Offset(drawCardLeft + cardW / 2, _kCardTopPad * scale + _kCardBackH * scale / 2);
   Offset get discardCardCenter =>
-      Offset(discardCardLeft + cardW / 2, _kCardTopPad + _kCardBackH / 2);
+      Offset(discardCardLeft + cardW / 2, _kCardTopPad * scale + _kCardBackH * scale / 2);
 
   @override
   bool operator ==(Object other) =>
-      other is _Metrics && other.totalW == totalW && other.hOffset == hOffset;
+      other is _Metrics &&
+      other.totalW == totalW &&
+      other.hOffset == hOffset &&
+      other.cardW == cardW;
   @override
-  int get hashCode => Object.hash(totalW, hOffset);
+  int get hashCode => Object.hash(totalW, hOffset, cardW);
 }
 
 // ── Cubic bezier arc tween ────────────────────────────────────────────────────
@@ -535,8 +657,8 @@ class _ScatteredViewState extends ConsumerState<_ScatteredView>
 
   // ── Window resize handling ────────────────────────────────────────────────
 
-  void _handleResize(BoxConstraints c) {
-    final m = _Metrics.from(c);
+  void _handleResize(BoxConstraints c, double scale) {
+    final m = _Metrics.from(c, scale);
     if (m == _metrics) return;
     _metrics = m;
     if (_isAnimating) {
@@ -554,6 +676,7 @@ class _ScatteredViewState extends ConsumerState<_ScatteredView>
 
   @override
   Widget build(BuildContext context) {
+    final scale = CardZoomData.of(context);
     final cards = _sorted;
     final n = cards.length;
     if (n == 0) return const _EmptyState();
@@ -592,8 +715,8 @@ class _ScatteredViewState extends ConsumerState<_ScatteredView>
           if (dx < -18) _requestFlip(false);
         },
         child: LayoutBuilder(builder: (context, constraints) {
-          _handleResize(constraints);
-          final m = _Metrics.from(constraints);
+          _handleResize(constraints, scale);
+          final m = _Metrics.from(constraints, scale);
           final anim = Listenable.merge([_rotCtrl, _posCtrl]);
 
           return AnimatedBuilder(
@@ -631,7 +754,7 @@ class _ScatteredViewState extends ConsumerState<_ScatteredView>
                   if (cur > 0 || (_isAnimating && !_activeForward))
                     Positioned(
                       left: m.discardLeft,
-                      top: _kCardTopPad,
+                      top: _kCardTopPad * scale,
                       width: m.discardW,
                       child: _DiscardZone(
                         count: _isAnimating && !_activeForward ? cur - 1 : cur,
@@ -641,13 +764,14 @@ class _ScatteredViewState extends ConsumerState<_ScatteredView>
                         shadowDepth: discSh,
                         cardW: m.cardW,
                         zoneW: m.discardW,
+                        scale: scale,
                       ),
                     ),
 
                   // ── Draw stack (left zone, PIXEL-STABLE ANCHOR) ───
                   Positioned(
                     left: m.drawLeft,
-                    top: _kCardTopPad,
+                    top: _kCardTopPad * scale,
                     width: m.drawW,
                     child: _DrawZone(
                       card: _isAnimating ? null : current,
@@ -659,6 +783,7 @@ class _ScatteredViewState extends ConsumerState<_ScatteredView>
                       shadowDepth: drawSh,
                       cardW: m.cardW,
                       zoneW: m.drawW,
+                      scale: scale,
                     ),
                   ),
 
@@ -666,7 +791,7 @@ class _ScatteredViewState extends ConsumerState<_ScatteredView>
                   if (_isAnimating)
                     Positioned(
                       left: arcOffset.dx - m.cardW / 2,
-                      top: arcOffset.dy - _kCardBackH / 2,
+                      top: arcOffset.dy - _kCardBackH * scale / 2,
                       width: m.cardW,
                       child: IgnorePointer(
                         child: Transform(
@@ -685,6 +810,7 @@ class _ScatteredViewState extends ConsumerState<_ScatteredView>
                               : _CardBack(
                                   stackColor: flyingColor,
                                   cardW: m.cardW,
+                                  scale: scale,
                                 ),
                         ),
                       ),
@@ -693,7 +819,7 @@ class _ScatteredViewState extends ConsumerState<_ScatteredView>
                   // ── Left nav arrow ────────────────────────────────
                   Positioned(
                     left: 16,
-                    top: _kCardTopPad + _kCardBackH / 2 - _kNavBtnSize / 2,
+                    top: _kCardTopPad * scale + _kCardBackH * scale / 2 - _kNavBtnSize / 2,
                     child: _NavBtn(
                       icon: Icons.chevron_left,
                       enabled: canBwd,
@@ -704,7 +830,7 @@ class _ScatteredViewState extends ConsumerState<_ScatteredView>
                   // ── Right nav arrow ───────────────────────────────
                   Positioned(
                     right: 16,
-                    top: _kCardTopPad + _kCardBackH / 2 - _kNavBtnSize / 2,
+                    top: _kCardTopPad * scale + _kCardBackH * scale / 2 - _kNavBtnSize / 2,
                     child: _NavBtn(
                       icon: Icons.chevron_right,
                       enabled: canFwd,
@@ -716,7 +842,7 @@ class _ScatteredViewState extends ConsumerState<_ScatteredView>
                   Positioned(
                     left: m.hOffset,
                     width: m.totalW,
-                    top: _kCardTopPad + _kCardBackH + 20,
+                    top: _kCardTopPad * scale + _kCardBackH * scale + 20,
                     child: Column(
                       children: [
                         Text(
@@ -764,24 +890,29 @@ class _DrawZone extends StatelessWidget {
     required this.shadowDepth,
     required this.cardW,
     required this.zoneW,
+    required this.scale,
   });
 
-  final AppCard? card;      // null during animation (current card is in flight)
+  final AppCard? card;
   final Color stackColor;
   final String? stackName;
-  final int remaining;      // cards below current
+  final int remaining;
   final double shadowDepth;
   final double cardW;
   final double zoneW;
+  final double scale;
 
   @override
   Widget build(BuildContext context) {
     final peeks = math.min(remaining, _kPeekCount);
     final cardLeft = (zoneW - cardW) / 2;
+    final cardBackH = _kCardBackH * scale;
+    final peekDy = _kPeekDy * scale;
+    final peekDx = _kPeekDx * scale;
 
     return SizedBox(
       width: zoneW,
-      height: _kCardBackH + peeks * _kPeekDy + 16,
+      height: cardBackH + peeks * peekDy + 16,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -791,7 +922,7 @@ class _DrawZone extends StatelessWidget {
               left: cardLeft,
               top: 0,
               width: cardW,
-              height: _kCardBackH,
+              height: cardBackH,
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   boxShadow: [
@@ -816,10 +947,10 @@ class _DrawZone extends StatelessWidget {
           // ── Peek layers (cards below, edges sticking out) ─────────
           for (var i = peeks; i >= 1; i--)
             Positioned(
-              left: cardLeft + i * _kPeekDx,
-              top: i * _kPeekDy,
+              left: cardLeft + i * peekDx,
+              top: i * peekDy,
               width: cardW,
-              height: _kCardBackH,
+              height: cardBackH,
               child: Container(
                 decoration: BoxDecoration(
                   color: AppColors.cardSurface.withValues(
@@ -859,24 +990,29 @@ class _DiscardZone extends StatelessWidget {
     required this.shadowDepth,
     required this.cardW,
     required this.zoneW,
+    required this.scale,
   });
 
-  final int count;           // how many cards are in the discard pile
-  final Color topColor;      // stack color of the top discard card
+  final int count;
+  final Color topColor;
   final double shadowDepth;
   final double cardW;
   final double zoneW;
+  final double scale;
 
   @override
   Widget build(BuildContext context) {
     if (count <= 0) return const SizedBox.shrink();
     final peeks = math.min(count - 1, _kPeekCount);
-    final cardRight = (zoneW - cardW) / 2; // right-justify the card back
+    final cardRight = (zoneW - cardW) / 2;
     final cardLeft = zoneW - cardRight - cardW;
+    final cardBackH = _kCardBackH * scale;
+    final peekDy = _kPeekDy * scale;
+    final peekDx = _kPeekDx * scale;
 
     return SizedBox(
       width: zoneW,
-      height: _kCardBackH + peeks * _kPeekDy + 16,
+      height: cardBackH + peeks * peekDy + 16,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -886,7 +1022,7 @@ class _DiscardZone extends StatelessWidget {
               left: cardLeft,
               top: 0,
               width: cardW,
-              height: _kCardBackH,
+              height: cardBackH,
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   boxShadow: [
@@ -911,10 +1047,10 @@ class _DiscardZone extends StatelessWidget {
           // ── Peek layers (backs sticking out to the left) ──────────
           for (var i = peeks; i >= 1; i--)
             Positioned(
-              left: cardLeft - i * _kPeekDx,
-              top: i * _kPeekDy,
+              left: cardLeft - i * peekDx,
+              top: i * peekDy,
               width: cardW,
-              height: _kCardBackH,
+              height: cardBackH,
               child: Container(
                 decoration: BoxDecoration(
                   color: AppColors.cardSurface.withValues(
@@ -931,7 +1067,7 @@ class _DiscardZone extends StatelessWidget {
           Positioned(
             left: cardLeft,
             top: 0,
-            child: _CardBack(stackColor: topColor, cardW: cardW),
+            child: _CardBack(stackColor: topColor, cardW: cardW, scale: scale),
           ),
         ],
       ),
@@ -942,15 +1078,16 @@ class _DiscardZone extends StatelessWidget {
 // ── Card back ─────────────────────────────────────────────────────────────────
 
 class _CardBack extends StatelessWidget {
-  const _CardBack({required this.stackColor, required this.cardW});
+  const _CardBack({required this.stackColor, required this.cardW, this.scale = 1.0});
   final Color stackColor;
   final double cardW;
+  final double scale;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
       width: cardW,
-      height: _kCardBackH,
+      height: _kCardBackH * scale,
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: AppColors.cardSurface,

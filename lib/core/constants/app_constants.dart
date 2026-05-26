@@ -8,6 +8,9 @@ abstract final class AppConstants {
   static const String kWindowHeight = 'windowHeight';
 
   // ── First-launch seed data ───────────────────────────────────────────────────
+  static const String kCardZoomScale = 'cardZoomScale';
+
+  // ── First-launch seed data ───────────────────────────────────────────────────
   static const String kDefaultStackId = 'stack_default_personal';
   static const String kDefaultCardId = 'card_default_welcome';
 }

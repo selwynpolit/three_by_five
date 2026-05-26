@@ -6,6 +6,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../data/database/app_database.dart';
 import '../../../providers/task_providers.dart';
+import '../../../widgets/zoom_indicator.dart';
 import 'task_row_widget.dart';
 
 class CardColumnWidget extends ConsumerStatefulWidget {
@@ -42,7 +43,6 @@ class _CardColumnWidgetState extends ConsumerState<CardColumnWidget> {
 
     if (from == -1) {
       // Cross-column or cross-card move: preserve insertion position.
-      // Build the new order with the dragged task inserted at insertBefore.
       final ids = tasks.map((t) => t.id).toList();
       ids.insert(insertBefore.clamp(0, ids.length), draggedId);
       await ref.read(taskRepositoryProvider).update(
@@ -68,13 +68,12 @@ class _CardColumnWidgetState extends ConsumerState<CardColumnWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final scale = CardZoomData.of(context);
     final tasks = widget.tasks;
 
     return Stack(
       children: [
         // Underlayer: catches taps/right-clicks on empty space in the column.
-        // Task rows (rendered above in the Column) absorb their own taps,
-        // so only truly empty areas reach this detector.
         if (widget.onEmptyTap != null || widget.onEmptySecondaryTap != null)
           Positioned.fill(
             child: GestureDetector(
@@ -87,115 +86,106 @@ class _CardColumnWidgetState extends ConsumerState<CardColumnWidget> {
           ),
         // Top layer: actual column content.
         Padding(
-      padding: const EdgeInsets.only(
-        left: AppSpacing.cardPadding,
-        right: AppSpacing.cardPadding,
-        top: 0,
-        bottom: 0,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // ── Column label (centered) ───────────────────────────────
-          SizedBox(
-            height: AppSpacing.columnHeaderHeight,
-            child: Align(
-              alignment: Alignment.center,
-              child: Text(
-                widget.label,
-                style: Theme.of(context).textTheme.labelMedium,
-              ),
-            ),
-          ),
-
-          // ── Task list — fixed 6-slot height, scrollable for overflow ──
-          SizedBox(
-            height: 6 * 26.0, // 156 px = 6 task cells (4 drop + 22 row each)
-            child: SingleChildScrollView(
-              child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (tasks.isEmpty)
-                  // Empty column — whole area is a drop target.
-                  DragTarget<String>(
-                    builder: (_, candidates, rejected) => AnimatedContainer(
-                      duration: const Duration(milliseconds: 80),
-                      padding: const EdgeInsets.symmetric(
-                          vertical: 8, horizontal: 4),
-                      decoration: BoxDecoration(
-                        color: candidates.isNotEmpty
-                            ? AppColors.accent.withValues(alpha: 0.07)
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        candidates.isNotEmpty ? 'Drop here' : '',
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodySmall
-                            ?.copyWith(
-                              color: AppColors.accent,
-                            ),
-                      ),
-                    ),
-                    onWillAcceptWithDetails: (_) {
-                      setState(() => _dropIndex = 0);
-                      return true;
-                    },
-                    onLeave: (_) => setState(() => _dropIndex = null),
-                    onAcceptWithDetails: (d) {
-                      _reorder(d.data, 0);
-                    },
-                  )
-                else ...[
-                  for (var i = 0; i < tasks.length; i++) ...[
-                    _DropZone(
-                      active: _dropIndex == i,
-                      onWillAccept: (id) {
-                        setState(() => _dropIndex = i);
-                        return true;
-                      },
-                      onLeave: (_) {
-                        if (_dropIndex == i) setState(() => _dropIndex = null);
-                      },
-                      onAccept: (id) => _reorder(id, i),
-                    ),
-                    _DragRow(
-                      key: ValueKey(tasks[i].id),
-                      task: tasks[i],
-                      isHidden: widget.isHidden,
-                    ),
-                  ],
-                  // Final drop zone — append to end.
-                  _DropZone(
-                    active: _dropIndex == tasks.length,
-                    onWillAccept: (id) {
-                      setState(() => _dropIndex = tasks.length);
-                      return true;
-                    },
-                    onLeave: (_) {
-                      if (_dropIndex == tasks.length) {
-                        setState(() => _dropIndex = null);
-                      }
-                    },
-                    onAccept: (id) => _reorder(id, tasks.length),
+          padding: EdgeInsets.symmetric(horizontal: AppSpacing.cardPadding * scale),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // ── Column label ──────────────────────────────────────
+              SizedBox(
+                height: AppSpacing.columnHeaderHeight * scale,
+                child: Align(
+                  alignment: Alignment.center,
+                  child: Text(
+                    widget.label,
+                    style: Theme.of(context).textTheme.labelMedium,
                   ),
-                ],
-              ],
-            ),          // Column
-            ),          // SingleChildScrollView
-          ),            // SizedBox
-        ],
-      ),
-        ),              // Padding (top layer)
+                ),
+              ),
+
+              // ── Task list — fixed 6-slot height, scrollable for overflow ──
+              SizedBox(
+                height: AppSpacing.taskRowSlotHeight * scale,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (tasks.isEmpty)
+                        // Empty column — whole area is a drop target.
+                        DragTarget<String>(
+                          builder: (_, candidates, rejected) => AnimatedContainer(
+                            duration: const Duration(milliseconds: 80),
+                            padding: EdgeInsets.symmetric(
+                                vertical: 8 * scale, horizontal: 4 * scale),
+                            decoration: BoxDecoration(
+                              color: candidates.isNotEmpty
+                                  ? AppColors.accent.withValues(alpha: 0.07)
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              candidates.isNotEmpty ? 'Drop here' : '',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(color: AppColors.accent),
+                            ),
+                          ),
+                          onWillAcceptWithDetails: (_) {
+                            setState(() => _dropIndex = 0);
+                            return true;
+                          },
+                          onLeave: (_) => setState(() => _dropIndex = null),
+                          onAcceptWithDetails: (d) => _reorder(d.data, 0),
+                        )
+                      else ...[
+                        for (var i = 0; i < tasks.length; i++) ...[
+                          _DropZone(
+                            active: _dropIndex == i,
+                            onWillAccept: (id) {
+                              setState(() => _dropIndex = i);
+                              return true;
+                            },
+                            onLeave: (_) {
+                              if (_dropIndex == i) setState(() => _dropIndex = null);
+                            },
+                            onAccept: (id) => _reorder(id, i),
+                          ),
+                          _DragRow(
+                            key: ValueKey(tasks[i].id),
+                            task: tasks[i],
+                            isHidden: widget.isHidden,
+                          ),
+                        ],
+                        // Final drop zone — append to end.
+                        _DropZone(
+                          active: _dropIndex == tasks.length,
+                          onWillAccept: (id) {
+                            setState(() => _dropIndex = tasks.length);
+                            return true;
+                          },
+                          onLeave: (_) {
+                            if (_dropIndex == tasks.length) {
+                              setState(() => _dropIndex = null);
+                            }
+                          },
+                          onAccept: (id) => _reorder(id, tasks.length),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
-    ); // Stack
+    );
   }
 }
 
 // ── Drop zone ─────────────────────────────────────────────────────────────────
-// 8px tall hit area; shows a 2px accent line when active.
+// Scales its height with the card zoom factor.
 
 class _DropZone extends StatelessWidget {
   const _DropZone({
@@ -212,12 +202,14 @@ class _DropZone extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scale = CardZoomData.of(context);
+
     return DragTarget<String>(
       builder: (_, candidates, rejected) => AnimatedContainer(
         duration: const Duration(milliseconds: 120),
-        height: active ? 22 : 4,
+        height: active ? 22 * scale : 4 * scale,
         margin: active
-            ? const EdgeInsets.symmetric(vertical: 2)
+            ? EdgeInsets.symmetric(vertical: 2 * scale)
             : EdgeInsets.zero,
         decoration: active
             ? BoxDecoration(
@@ -306,6 +298,8 @@ class _DragRowState extends State<_DragRow> {
 
   @override
   Widget build(BuildContext context) {
+    final scale = CardZoomData.of(context);
+
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
@@ -315,8 +309,9 @@ class _DragRowState extends State<_DragRow> {
           elevation: 6,
           borderRadius: BorderRadius.circular(6),
           child: Container(
-            width: 200,
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            width: 200 * scale,
+            padding: EdgeInsets.symmetric(
+                horizontal: 10 * scale, vertical: 6 * scale),
             decoration: BoxDecoration(
               color: AppColors.cardSurface,
               borderRadius: BorderRadius.circular(6),
@@ -392,7 +387,6 @@ class _AddTaskButtonState extends ConsumerState<_AddTaskButton> {
     }
     _controller.clear();
     if (keepOpen) {
-      // Stay open for rapid consecutive task entry.
       WidgetsBinding.instance
           .addPostFrameCallback((_) { if (mounted) _focusNode.requestFocus(); });
     } else {
@@ -444,8 +438,7 @@ class _AddTaskButtonState extends ConsumerState<_AddTaskButton> {
         onTap: _startAdding,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 120),
-          padding:
-              const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
           decoration: BoxDecoration(
             color: _hovered
                 ? AppColors.accent.withValues(alpha: 0.08)

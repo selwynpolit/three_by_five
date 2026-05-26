@@ -7,6 +7,7 @@ import '../../../../domain/undo/undo_action.dart';
 import '../../../providers/tag_providers.dart';
 import '../../../providers/task_providers.dart';
 import '../../../providers/ui_state_providers.dart';
+import '../../../widgets/zoom_indicator.dart';
 
 class TaskRowWidget extends ConsumerStatefulWidget {
   const TaskRowWidget({
@@ -122,6 +123,8 @@ class _TaskRowWidgetState extends ConsumerState<TaskRowWidget>
   }
 
   Widget _buildRow(BuildContext context, AppTask task) {
+    final scale = CardZoomData.of(context);
+
     // Watch tags for the underline color.
     final tagsAsync = ref.watch(tagsForTaskProvider(task.id));
     final tags = tagsAsync.valueOrNull ?? [];
@@ -139,14 +142,16 @@ class _TaskRowWidgetState extends ConsumerState<TaskRowWidget>
     final hasRichContent = (notesAsync.valueOrNull?.isNotEmpty ?? false) ||
         (attachmentsAsync.valueOrNull?.isNotEmpty ?? false);
 
+    final cbSize = AppSpacing.checkboxSize * scale;
+
     return SizedBox(
-      height: 22,
+      height: AppSpacing.taskRowHeight * scale,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // ── Priority indicator ─────────────────────────────────
-          _PriorityDot(priority: task.priority),
-          const SizedBox(width: 4),
+          _PriorityDot(priority: task.priority, scale: scale),
+          SizedBox(width: 4 * scale),
 
           // ── Checkbox ───────────────────────────────────────────
           GestureDetector(
@@ -158,13 +163,13 @@ class _TaskRowWidgetState extends ConsumerState<TaskRowWidget>
                     .animate(_checkScale),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 180),
-                  width: AppSpacing.checkboxSize,
-                  height: AppSpacing.checkboxSize,
+                  width: cbSize,
+                  height: cbSize,
                   decoration: BoxDecoration(
                     color: task.isCompleted
                         ? AppColors.accent
                         : Colors.transparent,
-                    borderRadius: BorderRadius.circular(4),
+                    borderRadius: BorderRadius.circular(4 * scale),
                     border: Border.all(
                       color: task.isCompleted
                           ? AppColors.accent
@@ -173,9 +178,9 @@ class _TaskRowWidgetState extends ConsumerState<TaskRowWidget>
                     ),
                   ),
                   child: task.isCompleted
-                      ? const Icon(
+                      ? Icon(
                           Icons.check,
-                          size: 12,
+                          size: 12 * scale,
                           color: AppColors.textInverse,
                         )
                       : null,
@@ -183,14 +188,13 @@ class _TaskRowWidgetState extends ConsumerState<TaskRowWidget>
               ),
             ),
           ),
-          const SizedBox(width: 6),
+          SizedBox(width: 6 * scale),
 
           // ── Title ─────────────────────────────────────────────
           Expanded(
             child: Text(
               task.title,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontSize: 13,
                     fontWeight: hasRichContent && !task.isCompleted
                         ? FontWeight.w700
                         : FontWeight.w400,
@@ -212,12 +216,12 @@ class _TaskRowWidgetState extends ConsumerState<TaskRowWidget>
 
           // Tag color indicator — small dot at the right edge.
           if (tagColor != null) ...[
-            const SizedBox(width: 3),
+            SizedBox(width: 3 * scale),
             Padding(
-              padding: const EdgeInsets.only(top: 8),
+              padding: EdgeInsets.only(top: 8 * scale),
               child: Container(
-                width: 6,
-                height: 6,
+                width: 6 * scale,
+                height: 6 * scale,
                 decoration: BoxDecoration(
                   color: tagColor,
                   shape: BoxShape.circle,
@@ -228,12 +232,12 @@ class _TaskRowWidgetState extends ConsumerState<TaskRowWidget>
 
           // Due-date icon — calendar icon coloured by urgency.
           if (task.dueDate != null && !task.isCompleted) ...[
-            const SizedBox(width: 3),
+            SizedBox(width: 3 * scale),
             Padding(
-              padding: const EdgeInsets.only(top: 5),
+              padding: EdgeInsets.only(top: 5 * scale),
               child: Icon(
                 Icons.event,
-                size: 11,
+                size: 11 * scale,
                 color: _dueDateColor(task.dueDate!),
               ),
             ),
@@ -241,12 +245,12 @@ class _TaskRowWidgetState extends ConsumerState<TaskRowWidget>
 
           // Note indicator — pencil icon when task has notes/attachments.
           if (hasRichContent && !task.isCompleted) ...[
-            const SizedBox(width: 3),
-            const Padding(
-              padding: EdgeInsets.only(top: 5),
+            SizedBox(width: 3 * scale),
+            Padding(
+              padding: EdgeInsets.only(top: 5 * scale),
               child: Icon(
                 Icons.edit_note,
-                size: 11,
+                size: 11 * scale,
                 color: AppColors.textTertiary,
               ),
             ),
@@ -271,8 +275,9 @@ Color _dueDateColor(DateTime date) {
 // ── Priority dot ──────────────────────────────────────────────────────────────
 
 class _PriorityDot extends StatelessWidget {
-  const _PriorityDot({required this.priority});
+  const _PriorityDot({required this.priority, required this.scale});
   final String priority;
+  final double scale;
 
   @override
   Widget build(BuildContext context) {
@@ -283,10 +288,10 @@ class _PriorityDot extends StatelessWidget {
     };
 
     return Padding(
-      padding: const EdgeInsets.only(top: 6),
+      padding: EdgeInsets.only(top: 6 * scale),
       child: Container(
-        width: 5,
-        height: 5,
+        width: 5 * scale,
+        height: 5 * scale,
         decoration: BoxDecoration(
           color: color,
           shape: BoxShape.circle,
@@ -295,4 +300,3 @@ class _PriorityDot extends StatelessWidget {
     );
   }
 }
-

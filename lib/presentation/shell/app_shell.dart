@@ -22,6 +22,7 @@ import '../views/kanban_view/kanban_view.dart';
 import '../views/task_detail/task_detail_panel.dart';
 import '../views/today_view/today_view.dart';
 import '../providers/backup_providers.dart';
+import '../providers/zoom_providers.dart';
 import '../widgets/about_dialog.dart';
 import '../providers/export_providers.dart';
 import '../providers/help_providers.dart';
@@ -228,6 +229,17 @@ class _ShellReadyState extends ConsumerState<_ShellReady> {
               () => switchView(AppView.archiveView),
           const SingleActivator(LogicalKeyboardKey.digit6, meta: true):
               () => switchView(AppView.allCardsView),
+          // ⌘+  /  ⌘= — zoom in (both keys share the same physical position)
+          const SingleActivator(LogicalKeyboardKey.equal, meta: true):
+              () => ref.read(cardZoomProvider.notifier).zoomIn(),
+          const SingleActivator(LogicalKeyboardKey.equal, meta: true, shift: true):
+              () => ref.read(cardZoomProvider.notifier).zoomIn(),
+          // ⌘- — zoom out
+          const SingleActivator(LogicalKeyboardKey.minus, meta: true):
+              () => ref.read(cardZoomProvider.notifier).zoomOut(),
+          // ⌘0 — reset zoom to 100 %
+          const SingleActivator(LogicalKeyboardKey.digit0, meta: true):
+              () => ref.read(cardZoomProvider.notifier).reset(),
           // ESC is handled exclusively by HardwareKeyboard.addHandler in
           // app_shell + task_detail_panel — removing it from CallbackShortcuts
           // prevents it from bypassing the panel's save-dialog interception.
