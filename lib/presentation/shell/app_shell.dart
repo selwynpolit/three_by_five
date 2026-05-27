@@ -230,16 +230,32 @@ class _ShellReadyState extends ConsumerState<_ShellReady> {
           const SingleActivator(LogicalKeyboardKey.digit6, meta: true):
               () => switchView(AppView.allCardsView),
           // ⌘+  /  ⌘= — zoom in (both keys share the same physical position)
-          const SingleActivator(LogicalKeyboardKey.equal, meta: true):
-              () => ref.read(cardZoomProvider.notifier).zoomIn(),
-          const SingleActivator(LogicalKeyboardKey.equal, meta: true, shift: true):
-              () => ref.read(cardZoomProvider.notifier).zoomIn(),
+          const SingleActivator(LogicalKeyboardKey.equal, meta: true): () {
+            final view = ref.read(activeViewProvider);
+            if (kZoomableViews.contains(view)) {
+              ref.read(viewZoomProvider(view).notifier).zoomIn();
+            }
+          },
+          const SingleActivator(LogicalKeyboardKey.equal, meta: true, shift: true): () {
+            final view = ref.read(activeViewProvider);
+            if (kZoomableViews.contains(view)) {
+              ref.read(viewZoomProvider(view).notifier).zoomIn();
+            }
+          },
           // ⌘- — zoom out
-          const SingleActivator(LogicalKeyboardKey.minus, meta: true):
-              () => ref.read(cardZoomProvider.notifier).zoomOut(),
+          const SingleActivator(LogicalKeyboardKey.minus, meta: true): () {
+            final view = ref.read(activeViewProvider);
+            if (kZoomableViews.contains(view)) {
+              ref.read(viewZoomProvider(view).notifier).zoomOut();
+            }
+          },
           // ⌘0 — reset zoom to 100 %
-          const SingleActivator(LogicalKeyboardKey.digit0, meta: true):
-              () => ref.read(cardZoomProvider.notifier).reset(),
+          const SingleActivator(LogicalKeyboardKey.digit0, meta: true): () {
+            final view = ref.read(activeViewProvider);
+            if (kZoomableViews.contains(view)) {
+              ref.read(viewZoomProvider(view).notifier).reset();
+            }
+          },
           // ESC is handled exclusively by HardwareKeyboard.addHandler in
           // app_shell + task_detail_panel — removing it from CallbackShortcuts
           // prevents it from bypassing the panel's save-dialog interception.

@@ -4,9 +4,12 @@ import 'package:intl/intl.dart' as intl;
 
 import '../../../core/theme/app_colors.dart';
 import '../../../data/database/app_database.dart';
+import '../../../domain/enums/app_view.dart';
 import '../../providers/card_providers.dart';
 import '../../providers/task_providers.dart';
 import '../../providers/ui_state_providers.dart';
+import '../../widgets/zoom_indicator.dart';
+import '../../widgets/zoomed_view_area.dart';
 
 // ── Calendar view ─────────────────────────────────────────────────────────────
 
@@ -67,17 +70,20 @@ class _CalendarViewState extends ConsumerState<CalendarView> {
         children: [
           _buildNavBar(),
           Expanded(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(child: _buildGrid(byDate)),
-                _DayPanel(
-                  date: _selected,
-                  tasks: selectedTasks,
-                  cardMap: cardMap,
-                  label: _panelFmt.format(_selected),
-                ),
-              ],
+            child: ZoomedViewArea(
+              view: AppView.calendarView,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(child: _buildGrid(byDate)),
+                  _DayPanel(
+                    date: _selected,
+                    tasks: selectedTasks,
+                    cardMap: cardMap,
+                    label: _panelFmt.format(_selected),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -413,8 +419,9 @@ class _DayPanel extends ConsumerWidget {
     final incomplete = tasks.where((t) => !t.isCompleted).length;
     final completed = tasks.length - incomplete;
 
+    final scale = CardZoomData.of(context);
     return Container(
-      width: 276,
+      width: 276 * scale,
       decoration: const BoxDecoration(
         color: AppColors.cardSurface,
         border:

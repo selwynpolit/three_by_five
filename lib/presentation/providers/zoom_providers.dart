@@ -2,12 +2,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../../core/constants/app_constants.dart';
+import '../../domain/enums/app_view.dart';
 import 'database_provider.dart';
 
 part 'zoom_providers.g.dart';
 
-// ── Zoom constants (all named — no magic numbers) ─────────────────────────────
+// ── Zoom constants ────────────────────────────────────────────────────────────
 
 const kDefaultZoom         = 1.00;
 const kMinZoom             = 0.60;
@@ -16,51 +16,49 @@ const kZoomSteps           = [0.60, 0.75, 1.00, 1.25, 1.50, 1.75, 2.00];
 const kZoomSpringMass      = 1.0;
 const kZoomSpringStiffness = 320.0;
 const kZoomSpringDamping   = 28.0;
-const kZoomIndicatorMs     = 1200; // fade-out delay after last zoom interaction
+const kZoomIndicatorMs     = 1200;
+
+// Views that participate in per-view zoom. Used to guard ⌘+/⌘-/⌘0 shortcuts.
+const kZoomableViews = {
+  AppView.cardView,
+  AppView.kanbanView,
+  AppView.calendarView,
+  AppView.todayView,
+};
 
 // ── Interaction counter ───────────────────────────────────────────────────────
-// Incremented on every user-triggered zoom event. The zoom indicator widget
-// watches this; the notifier does NOT increment during preference restore, so
-// the indicator stays hidden on launch.
+// Incremented on every user-triggered zoom event. ZoomIndicator watches this;
+// the notifier does NOT increment during preference restore.
 final zoomInteractionProvider = StateProvider<int>((ref) => 0);
 
-// ── Notifier ──────────────────────────────────────────────────────────────────
+// ── Per-view zoom notifier ────────────────────────────────────────────────────
 
 @Riverpod(keepAlive: true)
-class CardZoom extends _$CardZoom {
+class ViewZoom extends _$ViewZoom {
+  late AppView _view;
+
   @override
-  double build() {
-    // Restore persisted value asynchronously. Returns the default synchronously
-    // so first frame renders at 1.0; updates one microtask later.
+  double build(AppView view) {
+    _view = view;
     Future.microtask(_restore);
     return kDefaultZoom;
   }
 
   Future<void> _restore() async {
     final stored =
-        await ref.read(settingsDaoProvider).get(AppConstants.kCardZoomScale);
+        await ref.read(settingsDaoProvider).get('zoom_${_view.name}');
     if (stored == null) return;
     final parsed = double.tryParse(stored);
     if (parsed != null) {
-      // Set state directly — does NOT increment zoomInteractionProvider.
       state = parsed.clamp(kMinZoom, kMaxZoom);
     }
   }
 
-  void zoomIn() {
-    final next = _stepUp(state);
-    _set(next);
-  }
-
-  void zoomOut() {
-    final next = _stepDown(state);
-    _set(next);
-  }
-
+  void zoomIn() => _set(_stepUp(state));
+  void zoomOut() => _set(_stepDown(state));
   void reset() => _set(kDefaultZoom);
 
   /// Called continuously during a pinch gesture — no step snapping, no persist.
-  /// The caller is responsible for calling [snapToNearestStep] on gesture end.
   void setFromGesture(double rawScale) {
     state = clampDouble(rawScale, kMinZoom, kMaxZoom);
     ref.read(zoomInteractionProvider.notifier).update((n) => n + 1);
@@ -81,7 +79,7 @@ class CardZoom extends _$CardZoom {
   }
 
   void _persist(double scale) {
-    ref.read(settingsDaoProvider).set(AppConstants.kCardZoomScale, scale.toString());
+    ref.read(settingsDaoProvider).set('zoom_${_view.name}', scale.toString());
   }
 
   double _stepUp(double current) {

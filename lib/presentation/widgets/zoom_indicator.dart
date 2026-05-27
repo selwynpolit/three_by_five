@@ -58,9 +58,9 @@ class _ZoomIndicatorState extends ConsumerState<ZoomIndicator> {
   @override
   Widget build(BuildContext context) {
     // Fires whenever the user interacts with zoom (not on silent restore).
-    ref.listen(zoomInteractionProvider, (_, _next) => _show());
+    ref.listen(zoomInteractionProvider, (_, next) => _show());
 
-    final scale = ref.watch(cardZoomProvider);
+    final scale = CardZoomData.of(context);
     final pct = (scale * 100).round();
 
     return AnimatedOpacity(

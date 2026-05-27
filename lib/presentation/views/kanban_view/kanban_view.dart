@@ -6,9 +6,12 @@ import 'package:intl/intl.dart' as intl;
 
 import '../../../core/theme/app_colors.dart';
 import '../../../data/database/app_database.dart';
+import '../../../domain/enums/app_view.dart';
 import '../../providers/card_providers.dart';
 import '../../providers/task_providers.dart';
 import '../../providers/ui_state_providers.dart';
+import '../../widgets/zoom_indicator.dart';
+import '../../widgets/zoomed_view_area.dart';
 
 // ── Layout constants ───────────────────────────────────────────────────────────
 
@@ -110,25 +113,29 @@ class _KanbanViewState extends ConsumerState<KanbanView> {
     return Column(
       children: [
         Expanded(
-          child: ListView.separated(
-            controller: _scrollCtrl,
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-            itemCount: columns.length + 1, // +1 for the add-column ghost
-            separatorBuilder: (_, _) => const SizedBox(width: _kColGap),
-            itemBuilder: (context, i) {
-              if (i == columns.length) return _AddColumnGhost(onAdd: _addColumn);
-              final col = columns[i];
-              return _KanbanColumn(
-                key: ValueKey(col.id),
-                column: col,
-                tasks: byCol[col.id] ?? [],
-                cardMap: cardMap,
-                dragging: _dragging,
-                onDragStart: (t) => setState(() => _dragging = t),
-                onDragEnd: () => setState(() => _dragging = null),
-              );
-            },
+          child: ZoomedViewArea(
+            view: AppView.kanbanView,
+            child: ListView.separated(
+              controller: _scrollCtrl,
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              itemCount: columns.length + 1, // +1 for the add-column ghost
+              separatorBuilder: (ctx, _) =>
+                  SizedBox(width: _kColGap * CardZoomData.of(ctx)),
+              itemBuilder: (context, i) {
+                if (i == columns.length) return _AddColumnGhost(onAdd: _addColumn);
+                final col = columns[i];
+                return _KanbanColumn(
+                  key: ValueKey(col.id),
+                  column: col,
+                  tasks: byCol[col.id] ?? [],
+                  cardMap: cardMap,
+                  dragging: _dragging,
+                  onDragStart: (t) => setState(() => _dragging = t),
+                  onDragEnd: () => setState(() => _dragging = null),
+                );
+              },
+            ),
           ),
         ),
         _KanbanScrollbar(controller: _scrollCtrl),
@@ -439,12 +446,13 @@ class _KanbanColumnState extends ConsumerState<_KanbanColumn> {
 
   @override
   Widget build(BuildContext context) {
+    final scale = CardZoomData.of(context);
     final incomplete = widget.tasks.where((t) => !t.isCompleted).length;
     final total = widget.tasks.length;
     final lit = _dropIndex != null;
 
     return SizedBox(
-      width: _kColWidth,
+      width: _kColWidth * scale,
       child: Column(
         children: [
           // ── Column header ───────────────────────────────────────────────
@@ -454,7 +462,7 @@ class _KanbanColumnState extends ConsumerState<_KanbanColumn> {
             child: GestureDetector(
               onDoubleTap: _startEdit,
               child: Container(
-                height: _kColHeaderH,
+                height: _kColHeaderH * scale,
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: lit ? 0.20 : 0.14),
@@ -666,6 +674,7 @@ class _KanbanTaskCardState extends ConsumerState<_KanbanTaskCard> {
 
   @override
   Widget build(BuildContext context) {
+    final scale = CardZoomData.of(context);
     final content = _buildContent();
     return Draggable<AppTask>(
       data: widget.task,
@@ -675,7 +684,7 @@ class _KanbanTaskCardState extends ConsumerState<_KanbanTaskCard> {
         elevation: 8,
         borderRadius: BorderRadius.circular(_kCardRadius),
         child: SizedBox(
-          width: _kColWidth - 20,
+          width: (_kColWidth - 20) * scale,
           child: _buildContent(forFeedback: true),
         ),
       ),
@@ -902,8 +911,9 @@ class _AddColumnGhostState extends State<_AddColumnGhost> {
 
   @override
   Widget build(BuildContext context) {
+    final scale = CardZoomData.of(context);
     return SizedBox(
-      width: _kColWidth,
+      width: _kColWidth * scale,
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
         onEnter: (_) => setState(() => _hovered = true),

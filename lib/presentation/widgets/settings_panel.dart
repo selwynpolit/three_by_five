@@ -10,9 +10,11 @@ import 'package:path/path.dart' as p;
 
 import '../../core/theme/app_colors.dart';
 import '../../data/daos/settings_dao.dart';
+import '../../domain/enums/app_view.dart';
 import '../providers/backup_providers.dart';
 import '../providers/database_provider.dart';
 import '../providers/export_providers.dart';
+import '../providers/zoom_providers.dart';
 
 class SettingsPanelOverlay extends ConsumerWidget {
   const SettingsPanelOverlay({super.key});
@@ -134,6 +136,8 @@ class _SettingsCard extends ConsumerWidget {
                       const _SafetyBackupsSection(),
                       const SizedBox(height: 20),
                       const _ExportSection(),
+                      const SizedBox(height: 20),
+                      const _ZoomSection(),
                     ],
                   ),
                 ),
@@ -389,7 +393,7 @@ class _SafetyBackupsSection extends ConsumerWidget {
                     height: 16,
                     child: CircularProgressIndicator(strokeWidth: 1.5))),
           ),
-          error: (_, __) => const SizedBox.shrink(),
+          error: (_, err) => const SizedBox.shrink(),
           data: (records) {
             if (records.isEmpty) {
               return Text(
@@ -616,6 +620,124 @@ class _ExportSection extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+// ── Zoom section ──────────────────────────────────────────────────────────────
+
+class _ZoomSection extends ConsumerWidget {
+  const _ZoomSection();
+
+  static const _viewLabels = {
+    AppView.cardView: 'Card View',
+    AppView.kanbanView: 'Kanban',
+    AppView.calendarView: 'Calendar',
+    AppView.todayView: 'Today',
+  };
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SectionLabel('ZOOM'),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppColors.cardSurface,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppColors.cardBorder, width: 0.5),
+          ),
+          child: Column(
+            children: _viewLabels.entries.map((entry) {
+              final view = entry.key;
+              final label = entry.value;
+              final scale = ref.watch(viewZoomProvider(view));
+              final pct = (scale * 100).round();
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 5),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 88,
+                      child: Text(
+                        label,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: AppColors.textSecondary),
+                      ),
+                    ),
+                    const Spacer(),
+                    _ZoomStepBtn(
+                      icon: Icons.remove,
+                      onTap: () =>
+                          ref.read(viewZoomProvider(view).notifier).zoomOut(),
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 44,
+                      child: Text(
+                        '$pct%',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: AppColors.textPrimary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _ZoomStepBtn(
+                      icon: Icons.add,
+                      onTap: () =>
+                          ref.read(viewZoomProvider(view).notifier).zoomIn(),
+                    ),
+                    const SizedBox(width: 8),
+                    _SmallBtn('Reset', () =>
+                        ref.read(viewZoomProvider(view).notifier).reset()),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ZoomStepBtn extends StatefulWidget {
+  const _ZoomStepBtn({required this.icon, required this.onTap});
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  State<_ZoomStepBtn> createState() => _ZoomStepBtnState();
+}
+
+class _ZoomStepBtnState extends State<_ZoomStepBtn> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 100),
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            color: _hovered ? AppColors.divider : Colors.transparent,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: AppColors.cardBorder, width: 0.5),
+          ),
+          child: Icon(widget.icon, size: 14, color: AppColors.textSecondary),
+        ),
+      ),
     );
   }
 }

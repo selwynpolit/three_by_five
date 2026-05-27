@@ -5,9 +5,12 @@ import 'package:intl/intl.dart' as intl;
 
 import '../../../core/theme/app_colors.dart';
 import '../../../data/database/app_database.dart';
+import '../../../domain/enums/app_view.dart';
 import '../../providers/card_providers.dart';
 import '../../providers/task_providers.dart';
 import '../../providers/ui_state_providers.dart';
+import '../../widgets/zoom_indicator.dart';
+import '../../widgets/zoomed_view_area.dart';
 
 // ── Today dashboard ───────────────────────────────────────────────────────────
 
@@ -60,54 +63,57 @@ class _TodayViewState extends ConsumerState<TodayView> {
         children: [
           _Header(),
           Expanded(
-            child: Scrollbar(
-              controller: _scrollCtrl,
-              child: SingleChildScrollView(
-                controller: _scrollCtrl,
-                padding:
-                    const EdgeInsets.fromLTRB(40, 28, 40, 48),
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints:
-                        const BoxConstraints(maxWidth: 660),
-                    child: allClear
-                        ? _AllClearState()
-                        : Column(
-                            crossAxisAlignment:
-                                CrossAxisAlignment.start,
-                            children: [
-                              if (overdue.isNotEmpty) ...[
-                                _Section(
-                                  title: 'Overdue',
-                                  accent: AppColors.priorityHigh,
-                                  tasks: overdue,
-                                  cardMap: cardMap,
-                                ),
-                                const SizedBox(height: 28),
-                              ],
-                              _Section(
-                                title: 'Today',
-                                accent: AppColors.dueTodayText,
-                                tasks: today,
-                                cardMap: cardMap,
-                                emptyMessage:
-                                    'Nothing else due today.',
+            child: ZoomedViewArea(
+              view: AppView.todayView,
+              child: Builder(builder: (ctx) {
+                final scale = CardZoomData.of(ctx);
+                return Scrollbar(
+                  controller: _scrollCtrl,
+                  child: SingleChildScrollView(
+                    controller: _scrollCtrl,
+                    padding: EdgeInsets.fromLTRB(
+                        40 * scale, 28 * scale, 40 * scale, 48 * scale),
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: 660 * scale),
+                        child: allClear
+                            ? _AllClearState()
+                            : Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (overdue.isNotEmpty) ...[
+                                    _Section(
+                                      title: 'Overdue',
+                                      accent: AppColors.priorityHigh,
+                                      tasks: overdue,
+                                      cardMap: cardMap,
+                                    ),
+                                    const SizedBox(height: 28),
+                                  ],
+                                  _Section(
+                                    title: 'Today',
+                                    accent: AppColors.dueTodayText,
+                                    tasks: today,
+                                    cardMap: cardMap,
+                                    emptyMessage: 'Nothing else due today.',
+                                  ),
+                                  if (upcoming.isNotEmpty) ...[
+                                    const SizedBox(height: 28),
+                                    _Section(
+                                      title: 'Upcoming',
+                                      subtitle: 'next 7 days',
+                                      accent: AppColors.accent,
+                                      tasks: upcoming,
+                                      cardMap: cardMap,
+                                    ),
+                                  ],
+                                ],
                               ),
-                              if (upcoming.isNotEmpty) ...[
-                                const SizedBox(height: 28),
-                                _Section(
-                                  title: 'Upcoming',
-                                  subtitle: 'next 7 days',
-                                  accent: AppColors.accent,
-                                  tasks: upcoming,
-                                  cardMap: cardMap,
-                                ),
-                              ],
-                            ],
-                          ),
+                      ),
+                    ),
                   ),
-                ),
-              ),
+                );
+              }),
             ),
           ),
         ],

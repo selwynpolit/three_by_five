@@ -3,9 +3,7 @@ import 'dart:math' as math;
 
 import 'package:intl/intl.dart' as intl;
 
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/physics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -20,8 +18,9 @@ import '../../providers/stack_providers.dart';
 import '../../providers/tag_providers.dart';
 import '../../providers/task_providers.dart';
 import '../../providers/ui_state_providers.dart';
-import '../../providers/zoom_providers.dart';
+import '../../../domain/enums/app_view.dart';
 import '../../widgets/zoom_indicator.dart';
+import '../../widgets/zoomed_view_area.dart';
 import 'widgets/index_card_widget.dart';
 
 class CardView extends ConsumerWidget {
@@ -69,7 +68,7 @@ class CardView extends ConsumerWidget {
             };
             // Canvas has its own InteractiveViewer — exclude from zoom capture.
             if (layoutMode == CardLayoutMode.canvas) return cardContent;
-            return _ZoomedCardArea(child: cardContent);
+            return ZoomedViewArea(view: AppView.cardView, child: cardContent);
           }),
         ),
       ],
@@ -288,118 +287,6 @@ class _NewCardButtonState extends ConsumerState<_NewCardButton> {
   }
 }
 
-// ── Zoomed card area ──────────────────────────────────────────────────────────
-// Wraps all non-canvas card layouts. Captures trackpad pinch and ⌘+scroll,
-// runs a spring animation on the AnimationController, and propagates the
-// animated scale via CardZoomData. ZoomIndicator sits above the content.
-
-class _ZoomedCardArea extends ConsumerStatefulWidget {
-  const _ZoomedCardArea({required this.child});
-  final Widget child;
-
-  @override
-  ConsumerState<_ZoomedCardArea> createState() => _ZoomedCardAreaState();
-}
-
-class _ZoomedCardAreaState extends ConsumerState<_ZoomedCardArea>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl;
-  bool _gestureActive = false;
-  double _startGestureScale = kDefaultZoom;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      lowerBound: kMinZoom,
-      upperBound: kMaxZoom,
-      value: kDefaultZoom,
-    );
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  void _animateTo(double target) {
-    final clamped = target.clamp(kMinZoom, kMaxZoom);
-    _ctrl.animateWith(SpringSimulation(
-      const SpringDescription(
-        mass: kZoomSpringMass,
-        stiffness: kZoomSpringStiffness,
-        damping: kZoomSpringDamping,
-      ),
-      _ctrl.value,
-      clamped,
-      0,
-    ));
-  }
-
-  void _onPanZoomStart(PointerPanZoomStartEvent _) {
-    _gestureActive = true;
-    _startGestureScale = _ctrl.value;
-    _ctrl.stop();
-  }
-
-  void _onPanZoomUpdate(PointerPanZoomUpdateEvent ev) {
-    if (!_gestureActive) return;
-    final raw = _startGestureScale * ev.scale;
-    _ctrl.value = raw.clamp(kMinZoom, kMaxZoom);
-    ref.read(cardZoomProvider.notifier).setFromGesture(_ctrl.value);
-  }
-
-  void _onPanZoomEnd(PointerPanZoomEndEvent _) {
-    _gestureActive = false;
-    ref.read(cardZoomProvider.notifier).snapToNearestStep();
-    _animateTo(ref.read(cardZoomProvider));
-  }
-
-  void _onPointerSignal(PointerSignalEvent ev) {
-    if (ev is! PointerScrollEvent) return;
-    if (!HardwareKeyboard.instance.isMetaPressed) return;
-    if (ev.scrollDelta.dy > 0) {
-      ref.read(cardZoomProvider.notifier).zoomOut();
-    } else if (ev.scrollDelta.dy < 0) {
-      ref.read(cardZoomProvider.notifier).zoomIn();
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    ref.listen(cardZoomProvider, (_, next) {
-      if (_gestureActive) return;
-      _animateTo(next);
-    });
-
-    return Listener(
-      onPointerSignal: _onPointerSignal,
-      onPointerPanZoomStart: _onPanZoomStart,
-      onPointerPanZoomUpdate: _onPanZoomUpdate,
-      onPointerPanZoomEnd: _onPanZoomEnd,
-      child: AnimatedBuilder(
-        animation: _ctrl,
-        builder: (ctx, child) => Stack(
-          fit: StackFit.expand,
-          children: [
-            CardZoomData(scale: _ctrl.value, child: child!),
-            const Align(
-              alignment: Alignment.topCenter,
-              child: Padding(
-                padding: EdgeInsets.only(top: 12),
-                child: ZoomIndicator(),
-              ),
-            ),
-          ],
-        ),
-        child: widget.child,
-      ),
-    );
-  }
-}
-
 // ── Grid layout ───────────────────────────────────────────────────────────────
 
 class _GridView extends StatelessWidget {
@@ -445,10 +332,11 @@ class _ScatteredView extends ConsumerStatefulWidget {
 
 // ── Stack view constants (all tunable here) ───────────────────────────────────
 
-const _kDiscardFraction  = 0.45;    // left zone fraction of total width
-const _kGapFraction      = 0.10;    // gap between zones
-const _kDrawFraction     = 0.45;    // right zone fraction
-const _kMaxTotalWidth    = 920.0;   // cap before centering on wide windows
+const _kDiscardFraction  = 0.20;    // discard zone fraction (smaller = depth illusion)
+const _kGapFraction      = 0.06;    // gap between zones
+const _kDrawFraction     = 0.74;    // draw zone fraction (wider = more card room)
+const _kMaxTotalWidth    = 1400.0;  // cap before centering on wide windows
+const kDiscardPileScale  = 0.22;    // discard backs rendered at 22% of main card width
 const _kFlipMs           = 400;     // flip animation ms
 const _kArcPeakHeight    = 68.0;    // px the arc peaks above the midpoint
 const _kPeekCount        = 4;       // card-edge layers beneath current card
@@ -1004,25 +892,27 @@ class _DiscardZone extends StatelessWidget {
   Widget build(BuildContext context) {
     if (count <= 0) return const SizedBox.shrink();
     final peeks = math.min(count - 1, _kPeekCount);
-    final cardRight = (zoneW - cardW) / 2;
-    final cardLeft = zoneW - cardRight - cardW;
-    final cardBackH = _kCardBackH * scale;
-    final peekDy = _kPeekDy * scale;
-    final peekDx = _kPeekDx * scale;
+
+    // Perspective: discard backs are a fraction of the main card size.
+    final backW = cardW * kDiscardPileScale;
+    final backH = _kCardBackH * scale * kDiscardPileScale;
+    final backLeft = (zoneW - backW) / 2;
+    final peekDy = _kPeekDy * scale * kDiscardPileScale;
+    final peekDx = _kPeekDx * scale * kDiscardPileScale;
 
     return SizedBox(
       width: zoneW,
-      height: cardBackH + peeks * peekDy + 16,
+      height: backH + peeks * peekDy + 16,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          // ── Shadow extends down-left (mirrored from draw stack) ───
+          // ── Shadow beneath the small back ─────────────────────────
           if (shadowDepth > 0)
             Positioned(
-              left: cardLeft,
+              left: backLeft,
               top: 0,
-              width: cardW,
-              height: cardBackH,
+              width: backW,
+              height: backH,
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   boxShadow: [
@@ -1044,13 +934,13 @@ class _DiscardZone extends StatelessWidget {
               ),
             ),
 
-          // ── Peek layers (backs sticking out to the left) ──────────
+          // ── Peek layers (tiny backs sticking out to the left) ─────
           for (var i = peeks; i >= 1; i--)
             Positioned(
-              left: cardLeft - i * peekDx,
+              left: backLeft - i * peekDx,
               top: i * peekDy,
-              width: cardW,
-              height: cardBackH,
+              width: backW,
+              height: backH,
               child: Container(
                 decoration: BoxDecoration(
                   color: AppColors.cardSurface.withValues(
@@ -1063,11 +953,15 @@ class _DiscardZone extends StatelessWidget {
               ),
             ),
 
-          // ── Top discard card (face-down, showing back) ────────────
+          // ── Top discard card (face-down, small perspective back) ──
           Positioned(
-            left: cardLeft,
+            left: backLeft,
             top: 0,
-            child: _CardBack(stackColor: topColor, cardW: cardW, scale: scale),
+            child: _CardBack(
+              stackColor: topColor,
+              cardW: backW,
+              scale: scale * kDiscardPileScale,
+            ),
           ),
         ],
       ),
