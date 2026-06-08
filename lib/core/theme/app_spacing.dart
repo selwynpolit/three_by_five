@@ -14,7 +14,7 @@ abstract final class AppSpacing {
   static const double viewPadding = 32;
 
   // ── Card ────────────────────────────────────────────────────────────────────
-  static const double cardWidth = 374;
+  static const double cardWidth = 520;
   static const double cardPadding = 14;
   static const double cardHeaderHeight = 54;
   static const double cardRadius = 10;

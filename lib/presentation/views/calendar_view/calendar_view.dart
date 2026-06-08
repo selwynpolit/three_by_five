@@ -8,7 +8,6 @@ import '../../../domain/enums/app_view.dart';
 import '../../providers/card_providers.dart';
 import '../../providers/task_providers.dart';
 import '../../providers/ui_state_providers.dart';
-import '../../widgets/zoom_indicator.dart';
 import '../../widgets/zoomed_view_area.dart';
 
 // ── Calendar view ─────────────────────────────────────────────────────────────
@@ -361,6 +360,8 @@ class _TaskPill extends StatelessWidget {
   const _TaskPill({required this.task});
   final AppTask task;
 
+  static final _dueFmt = intl.DateFormat('d MMM');
+
   @override
   Widget build(BuildContext context) {
     final color = task.priority == 'high'
@@ -368,7 +369,16 @@ class _TaskPill extends StatelessWidget {
         : task.priority == 'low'
             ? AppColors.priorityLow
             : AppColors.accent;
-    return Container(
+
+    final textStyle = TextStyle(
+      fontSize: 10,
+      color: task.isCompleted ? color.withValues(alpha: 0.45) : color,
+      fontWeight: FontWeight.w500,
+      decoration: task.isCompleted ? TextDecoration.lineThrough : null,
+      decorationColor: color.withValues(alpha: 0.45),
+    );
+
+    final pill = Container(
       margin: const EdgeInsets.only(bottom: 1),
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
       decoration: BoxDecoration(
@@ -381,18 +391,60 @@ class _TaskPill extends StatelessWidget {
         task.title,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontSize: 10,
-          color: task.isCompleted
-              ? color.withValues(alpha: 0.45)
-              : color,
-          fontWeight: FontWeight.w500,
-          decoration:
-              task.isCompleted ? TextDecoration.lineThrough : null,
-          decorationColor: color.withValues(alpha: 0.45),
-        ),
+        style: textStyle,
       ),
     );
+
+    return LayoutBuilder(builder: (context, constraints) {
+      final tp = TextPainter(
+        text: TextSpan(text: task.title, style: textStyle),
+        maxLines: 1,
+        textDirection: TextDirection.ltr,
+        textScaler: MediaQuery.textScalerOf(context),
+      )..layout(maxWidth: constraints.maxWidth - 8);
+
+      if (!tp.didExceedMaxLines) return pill;
+
+      // Build tooltip meta line (priority + due date).
+      final parts = <String>[];
+      if (task.priority == 'high') parts.add('High priority');
+      if (task.priority == 'low') parts.add('Low priority');
+      if (task.dueDate != null) parts.add('Due ${_dueFmt.format(task.dueDate!)}');
+      final meta = parts.join(' · ');
+
+      return Tooltip(
+        richMessage: TextSpan(
+          children: [
+            TextSpan(
+              text: task.title,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            if (meta.isNotEmpty) ...[
+              const TextSpan(text: '\n'),
+              TextSpan(
+                text: meta,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.65),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+            ],
+          ],
+        ),
+        decoration: BoxDecoration(
+          color: const Color(0xE6232323),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        preferBelow: false,
+        waitDuration: const Duration(milliseconds: 500),
+        child: pill,
+      );
+    });
   }
 }
 
@@ -419,9 +471,8 @@ class _DayPanel extends ConsumerWidget {
     final incomplete = tasks.where((t) => !t.isCompleted).length;
     final completed = tasks.length - incomplete;
 
-    final scale = CardZoomData.of(context);
     return Container(
-      width: 276 * scale,
+      width: 276,
       decoration: const BoxDecoration(
         color: AppColors.cardSurface,
         border:

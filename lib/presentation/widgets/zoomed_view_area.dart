@@ -31,11 +31,14 @@ class _ZoomedViewAreaState extends ConsumerState<ZoomedViewArea>
   @override
   void initState() {
     super.initState();
+    // Initialise from the current provider value so zoom survives stack switches.
+    // ref.listen only fires on changes; without this the controller would always
+    // reset to kDefaultZoom whenever ZoomedViewArea is recreated.
     _ctrl = AnimationController(
       vsync: this,
       lowerBound: kMinZoom,
       upperBound: kMaxZoom,
-      value: kDefaultZoom,
+      value: ref.read(viewZoomProvider(widget.view)),
     );
   }
 
@@ -111,11 +114,17 @@ class _ZoomedViewAreaState extends ConsumerState<ZoomedViewArea>
               ),
               child: CardZoomData(scale: _ctrl.value, child: child!),
             ),
-            const Align(
-              alignment: Alignment.topCenter,
+            Align(
+              alignment: Alignment.bottomCenter,
               child: Padding(
-                padding: EdgeInsets.only(top: 12),
-                child: ZoomIndicator(),
+                padding: const EdgeInsets.only(bottom: 20),
+                child: ZoomIndicator(
+                  scale: _ctrl.value,
+                  onZoomIn: () =>
+                      ref.read(viewZoomProvider(widget.view).notifier).zoomIn(),
+                  onZoomOut: () =>
+                      ref.read(viewZoomProvider(widget.view).notifier).zoomOut(),
+                ),
               ),
             ),
           ],

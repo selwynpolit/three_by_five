@@ -104,6 +104,20 @@ final effectiveCreateStackProvider = Provider<String?>((ref) {
   );
 });
 
+/// In-memory deck position cache — key is stack UUID (or 'all'), value is the
+/// card index. Survives within-session stack switches without async DB round-trips.
+final deckPositionCacheProvider =
+    NotifierProvider<DeckPositionCacheNotifier, Map<String, int>>(
+  DeckPositionCacheNotifier.new,
+);
+
+class DeckPositionCacheNotifier extends Notifier<Map<String, int>> {
+  @override
+  Map<String, int> build() => const {};
+
+  void save(String key, int idx) => state = {...state, key: idx};
+}
+
 /// Stack IDs whose cards are currently hidden from the card view.
 /// Empty = all stacks visible (the default).
 final hiddenStackIdsProvider =

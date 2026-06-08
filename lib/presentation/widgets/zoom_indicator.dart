@@ -1,11 +1,8 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/theme/app_colors.dart';
-import '../providers/zoom_providers.dart';
+import '../providers/zoom_providers.dart' show kDefaultZoom;
 
 // ── CardZoomData — InheritedWidget ────────────────────────────────────────────
 // Carries the current animated zoom scale through the card widget tree.
@@ -24,75 +21,105 @@ class CardZoomData extends InheritedWidget {
   bool updateShouldNotify(CardZoomData old) => old.scale != scale;
 }
 
-// ── ZoomIndicator — floating pill ─────────────────────────────────────────────
-// Shown centred at the top of the card content area whenever the zoom level
-// changes via a user interaction. Auto-fades after kZoomIndicatorMs ms.
-// Does NOT appear on app launch or when the saved zoom is silently restored.
+// ── ZoomIndicator — interactive bottom pill ───────────────────────────────────
+// Always visible at the bottom of the zoomable view. − and + buttons step zoom.
 
-class ZoomIndicator extends ConsumerStatefulWidget {
-  const ZoomIndicator({super.key});
+class ZoomIndicator extends StatelessWidget {
+  const ZoomIndicator({
+    super.key,
+    required this.scale,
+    this.onZoomIn,
+    this.onZoomOut,
+  });
 
-  @override
-  ConsumerState<ZoomIndicator> createState() => _ZoomIndicatorState();
-}
-
-class _ZoomIndicatorState extends ConsumerState<ZoomIndicator> {
-  Timer? _hideTimer;
-  bool _visible = false;
-
-  @override
-  void dispose() {
-    _hideTimer?.cancel();
-    super.dispose();
-  }
-
-  void _show() {
-    _hideTimer?.cancel();
-    setState(() => _visible = true);
-    _hideTimer = Timer(
-      const Duration(milliseconds: kZoomIndicatorMs),
-      () { if (mounted) setState(() => _visible = false); },
-    );
-  }
+  final double scale;
+  final VoidCallback? onZoomIn;
+  final VoidCallback? onZoomOut;
 
   @override
   Widget build(BuildContext context) {
-    // Fires whenever the user interacts with zoom (not on silent restore).
-    ref.listen(zoomInteractionProvider, (_, next) => _show());
-
-    final scale = CardZoomData.of(context);
     final pct = (scale * 100).round();
 
-    return AnimatedOpacity(
-      opacity: _visible ? 1.0 : 0.0,
-      duration: const Duration(milliseconds: 180),
-      child: IgnorePointer(
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-          decoration: BoxDecoration(
-            color: AppColors.canvas,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x30000000),
-                blurRadius: 10,
-                offset: Offset(0, 3),
-              ),
-              BoxShadow(
-                color: Color(0x14000000),
-                blurRadius: 24,
-                offset: Offset(0, 8),
-              ),
-            ],
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.canvas,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x30000000),
+            blurRadius: 10,
+            offset: Offset(0, 3),
           ),
-          child: Text(
-            '$pct%',
-            style: GoogleFonts.lato(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textSecondary,
-              letterSpacing: 0.2,
+          BoxShadow(
+            color: Color(0x14000000),
+            blurRadius: 24,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _PillBtn(icon: Icons.remove, onTap: onZoomOut),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Text(
+              '$pct%',
+              style: GoogleFonts.lato(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textSecondary,
+                letterSpacing: 0.2,
+              ),
             ),
+          ),
+          _PillBtn(icon: Icons.add, onTap: onZoomIn),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Button inside the pill ────────────────────────────────────────────────────
+
+class _PillBtn extends StatefulWidget {
+  const _PillBtn({required this.icon, required this.onTap});
+  final IconData icon;
+  final VoidCallback? onTap;
+
+  @override
+  State<_PillBtn> createState() => _PillBtnState();
+}
+
+class _PillBtnState extends State<_PillBtn> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = widget.onTap != null;
+    return MouseRegion(
+      cursor:
+          enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 100),
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: _hovered && enabled
+                ? AppColors.divider
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Icon(
+            widget.icon,
+            size: 14,
+            color: enabled
+                ? AppColors.textSecondary
+                : AppColors.textDisabled,
           ),
         ),
       ),

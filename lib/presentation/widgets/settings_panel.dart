@@ -12,6 +12,7 @@ import '../../core/theme/app_colors.dart';
 import '../../data/daos/settings_dao.dart';
 import '../../domain/enums/app_view.dart';
 import '../providers/backup_providers.dart';
+import '../providers/card_view_settings_provider.dart';
 import '../providers/database_provider.dart';
 import '../providers/export_providers.dart';
 import '../providers/zoom_providers.dart';
@@ -129,6 +130,8 @@ class _SettingsCard extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      const _CardViewSection(),
+                      const SizedBox(height: 20),
                       const _BackupRestoreSection(),
                       const SizedBox(height: 20),
                       const _AutoBackupSection(),
@@ -146,6 +149,64 @@ class _SettingsCard extends ConsumerWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+// ── Card View section ─────────────────────────────────────────────────────────
+
+class _CardViewSection extends ConsumerWidget {
+  const _CardViewSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final showGenerate = ref.watch(showGenerateButtonProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SectionLabel('CARD VIEW'),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: AppColors.cardSurface,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppColors.cardBorder, width: 0.5),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Show Generate button',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: AppColors.textSecondary,
+                          ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Generates 3 test cards with sample tasks.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: AppColors.textDisabled,
+                            fontSize: 11,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(
+                value: showGenerate,
+                onChanged: (_) =>
+                    ref.read(showGenerateButtonProvider.notifier).toggle(),
+                activeColor: AppColors.accent,
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

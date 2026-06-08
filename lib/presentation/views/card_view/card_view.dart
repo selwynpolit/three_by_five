@@ -14,6 +14,8 @@ import '../../../data/database/app_database.dart';
 import '../../../domain/undo/undo_action.dart';
 import '../../providers/canvas_providers.dart';
 import '../../providers/card_providers.dart';
+import '../../providers/card_view_settings_provider.dart';
+import '../../providers/database_provider.dart';
 import '../../providers/stack_providers.dart';
 import '../../providers/tag_providers.dart';
 import '../../providers/task_providers.dart';
@@ -60,7 +62,11 @@ class CardView extends ConsumerWidget {
               CardLayoutMode.grid =>
                 _GridView(cards: cards, stackMap: stackMap, showStackPill: showStackPill),
               CardLayoutMode.scattered =>
-                _ScatteredView(cards: cards, stackMap: stackMap, showStackPill: showStackPill),
+                _ScatteredView(
+                    key: ValueKey(activeStackId ?? 'all'),
+                    cards: cards,
+                    stackMap: stackMap,
+                    showStackPill: showStackPill),
               CardLayoutMode.canvas =>
                 _CanvasView(cards: cards, stackMap: stackMap, showStackPill: showStackPill),
               CardLayoutMode.taskList =>
@@ -110,13 +116,16 @@ class _CardViewHeader extends ConsumerWidget {
             final createStackId =
                 ref.watch(effectiveCreateStackProvider);
             if (createStackId == null) return const SizedBox.shrink();
+            final showGenerate = ref.watch(showGenerateButtonProvider);
             return Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 _DeleteCompletedButton(),
                 const SizedBox(width: 8),
-                _GenerateButton(stackId: createStackId),
-                const SizedBox(width: 8),
+                if (showGenerate) ...[
+                  _GenerateButton(stackId: createStackId),
+                  const SizedBox(width: 8),
+                ],
                 _NewCardButton(stackId: createStackId),
               ],
             );
@@ -319,7 +328,8 @@ class _GridView extends StatelessWidget {
 
 class _ScatteredView extends ConsumerStatefulWidget {
   const _ScatteredView(
-      {required this.cards,
+      {super.key,
+      required this.cards,
       required this.stackMap,
       required this.showStackPill});
   final List<AppCard> cards;
@@ -402,6 +412,10 @@ class _Metrics {
       Offset(drawCardLeft + cardW / 2, _kCardTopPad * scale + _kCardBackH * scale / 2);
   Offset get discardCardCenter =>
       Offset(discardCardLeft + cardW / 2, _kCardTopPad * scale + _kCardBackH * scale / 2);
+  // The actual visual center of the small discard-pile back (scaled down).
+  Offset get discardPileCenter =>
+      Offset(discardCardLeft + cardW / 2,
+             _kCardTopPad * scale + _kCardBackH * scale * kDiscardPileScale / 2);
 
   @override
   bool operator ==(Object other) =>
@@ -448,6 +462,8 @@ class _ScatteredViewState extends ConsumerState<_ScatteredView>
 
   int _idx = 0;
 
+  late final FocusNode _focusNode;
+
   // Two independent controllers driven simultaneously.
   late final AnimationController _rotCtrl; // rotation  0→1 → rotateY(0→π)
   late final AnimationController _posCtrl; // position  0→1 → arc Offset
@@ -459,15 +475,24 @@ class _ScatteredViewState extends ConsumerState<_ScatteredView>
   final Queue<bool> _queue = Queue<bool>();
   bool _isAnimating = false;
 
+  // Prevents trackpad pan gesture from flipping more than one card per swipe.
+  bool _panFlipDone = false;
+
   // Latest layout metrics cached from LayoutBuilder.
   _Metrics? _metrics;
 
   List<AppCard> get _sorted =>
       [...widget.cards]..sort((a, b) => b.date.compareTo(a.date));
 
+  String get _posKey {
+    final k = widget.key;
+    return k is ValueKey<String> ? k.value : 'all';
+  }
+
   @override
   void initState() {
     super.initState();
+    _focusNode = FocusNode(debugLabel: 'CardStackFocus');
     _rotCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: _kFlipMs),
@@ -476,14 +501,43 @@ class _ScatteredViewState extends ConsumerState<_ScatteredView>
       vsync: this,
       duration: const Duration(milliseconds: _kFlipMs),
     );
-    // Only one listener needed — rotation and position share the same duration.
     _rotCtrl.addStatusListener((status) {
       if (status == AnimationStatus.completed) _completeFlip();
     });
+    // Restore position: in-memory cache is instant (survives stack switches);
+    // DB read is the fallback for app-restart case.
+    final cached = ref.read(deckPositionCacheProvider)[_posKey];
+    if (cached != null) {
+      _idx = cached.clamp(0, widget.cards.isEmpty ? 0 : widget.cards.length - 1);
+    } else {
+      Future.microtask(_restorePosition);
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focusNode.requestFocus();
+    });
+  }
+
+  Future<void> _restorePosition() async {
+    if (!mounted) return;
+    final stored =
+        await ref.read(settingsDaoProvider).get('deckPos_$_posKey');
+    if (!mounted) return;
+    if (stored != null) {
+      final parsed = int.tryParse(stored);
+      if (parsed != null) {
+        final n = _sorted.length;
+        final clamped = parsed.clamp(0, n > 0 ? n - 1 : 0);
+        setState(() => _idx = clamped);
+        // Populate the in-memory cache so subsequent stack switches
+        // restore instantly without an async DB round-trip.
+        ref.read(deckPositionCacheProvider.notifier).save(_posKey, clamped);
+      }
+    }
   }
 
   @override
   void dispose() {
+    _focusNode.dispose();
     _rotCtrl.dispose();
     _posCtrl.dispose();
     super.dispose();
@@ -510,8 +564,8 @@ class _ScatteredViewState extends ConsumerState<_ScatteredView>
     final m = _metrics;
     if (m == null) { _isAnimating = false; return; }
     _arcTween = _activeForward
-        ? _ArcTween(begin: m.drawCardCenter, end: m.discardCardCenter)
-        : _ArcTween(begin: m.discardCardCenter, end: m.drawCardCenter);
+        ? _ArcTween(begin: m.drawCardCenter, end: m.discardPileCenter)
+        : _ArcTween(begin: m.discardPileCenter, end: m.drawCardCenter);
     _rotCtrl.forward(from: 0);
     _posCtrl.forward(from: 0);
   }
@@ -524,7 +578,21 @@ class _ScatteredViewState extends ConsumerState<_ScatteredView>
     });
     _rotCtrl.reset();
     _posCtrl.reset();
+    _savePosition();
     _processQueue();
+  }
+
+  void _jumpTo(int targetIdx) {
+    final n = _sorted.length;
+    final clamped = targetIdx.clamp(0, n > 0 ? n - 1 : 0);
+    if (clamped == _idx) return;
+    setState(() => _idx = clamped);
+    _savePosition();
+  }
+
+  void _savePosition() {
+    ref.read(deckPositionCacheProvider.notifier).save(_posKey, _idx);
+    ref.read(settingsDaoProvider).set('deckPos_$_posKey', _idx.toString()).ignore();
   }
 
   // ── Smooth shadow depths ──────────────────────────────────────────────────
@@ -576,7 +644,7 @@ class _ScatteredViewState extends ConsumerState<_ScatteredView>
     final canBwd = cur > 0;
 
     return Focus(
-      autofocus: false,
+      focusNode: _focusNode,
       onKeyEvent: (_, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
         if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
@@ -590,17 +658,18 @@ class _ScatteredViewState extends ConsumerState<_ScatteredView>
         return KeyEventResult.ignored;
       },
       child: Listener(
-        onPointerSignal: (ev) {
-          // Trackpad horizontal scroll → flip navigation.
-          // PointerScrollEvent is the concrete type for scroll signals.
-          final scroll = ev;
-          if (scroll.runtimeType.toString() == 'PointerScrollEvent') return;
-          // Handled via onPointerPanZoom below for trackpad; keep signal hook.
-        },
+        onPointerDown: (_) => _focusNode.requestFocus(),
+        onPointerPanZoomStart: (_) { _panFlipDone = false; },
         onPointerPanZoomUpdate: (ev) {
+          if (_panFlipDone) return;
           final dx = ev.panDelta.dx;
-          if (dx > 18) _requestFlip(true);
-          if (dx < -18) _requestFlip(false);
+          if (dx > 18) {
+            _requestFlip(false);
+            _panFlipDone = true;
+          } else if (dx < -18) {
+            _requestFlip(true);
+            _panFlipDone = true;
+          }
         },
         child: LayoutBuilder(builder: (context, constraints) {
           _handleResize(constraints, scale);
@@ -617,6 +686,11 @@ class _ScatteredViewState extends ConsumerState<_ScatteredView>
               final posT = CurvedAnimation(
                 parent: _posCtrl, curve: Curves.easeInOut).value;
               final arcOffset = _arcTween?.transform(posT) ?? m.drawCardCenter;
+
+              // ── scale: shrink to kDiscardPileScale as card lands ──
+              final flyScale = _activeForward
+                  ? 1.0 - posT * (1.0 - kDiscardPileScale)
+                  : kDiscardPileScale + posT * (1.0 - kDiscardPileScale);
 
               // ── rotateY angle ─────────────────────────────────────
               final rotT = CurvedAnimation(
@@ -682,12 +756,14 @@ class _ScatteredViewState extends ConsumerState<_ScatteredView>
                       top: arcOffset.dy - _kCardBackH * scale / 2,
                       width: m.cardW,
                       child: IgnorePointer(
-                        child: Transform(
-                          alignment: Alignment.center,
-                          transform: Matrix4.identity()
-                            ..setEntry(3, 2, _kPerspective)
-                            ..rotateY(displayAngle),
-                          child: flyingShowFront
+                        child: Transform.scale(
+                          scale: flyScale,
+                          child: Transform(
+                            alignment: Alignment.center,
+                            transform: Matrix4.identity()
+                              ..setEntry(3, 2, _kPerspective)
+                              ..rotateY(displayAngle),
+                            child: flyingShowFront
                               ? IndexCardWidget(
                                   card: flyingCard,
                                   stackColor: flyingColor,
@@ -700,8 +776,9 @@ class _ScatteredViewState extends ConsumerState<_ScatteredView>
                                   cardW: m.cardW,
                                   scale: scale,
                                 ),
-                        ),
-                      ),
+                          ),  // Transform (flip)
+                        ),  // Transform.scale
+                      ),  // IgnorePointer
                     ),
 
                   // ── Left nav arrow ────────────────────────────────
@@ -733,26 +810,37 @@ class _ScatteredViewState extends ConsumerState<_ScatteredView>
                     top: _kCardTopPad * scale + _kCardBackH * scale + 20,
                     child: Column(
                       children: [
-                        Text(
-                          '${cur + 1} of $n',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.white.withValues(alpha: 0.55),
-                          ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            _JumpBtn(
+                              icon: Icons.first_page,
+                              tooltip: 'Newest card',
+                              enabled: canBwd,
+                              onTap: () => _jumpTo(0),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '${cur + 1} of $n',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.white.withValues(alpha: 0.55),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            _JumpBtn(
+                              icon: Icons.last_page,
+                              tooltip: 'Oldest card',
+                              enabled: canFwd,
+                              onTap: () => _jumpTo(n - 1),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 10),
                         _DotIndicator(
                           total: n,
                           current: cur,
-                          onTap: (i) {
-                            final diff = i - cur;
-                            if (diff > 0) {
-                              for (var k = 0; k < diff; k++) { _requestFlip(true); }
-                            } else if (diff < 0) {
-                              for (var k = 0; k < -diff; k++) { _requestFlip(false); }
-                            }
-                          },
+                          onTap: _jumpTo,
                         ),
                       ],
                     ),
@@ -996,13 +1084,18 @@ class _CardBack extends StatelessWidget {
               Container(height: 3, color: stackColor.withValues(alpha: 0.7)),
               Expanded(
                 child: Center(
-                  child: Text(
-                    'BACK',
-                    style: TextStyle(
-                      fontSize: 64,
-                      fontWeight: FontWeight.w900,
-                      color: AppColors.textPrimary.withValues(alpha: 0.07),
-                      letterSpacing: 10,
+                  child: MediaQuery(
+                    data: MediaQuery.of(context).copyWith(
+                      textScaler: TextScaler.linear(scale),
+                    ),
+                    child: Text(
+                      'BACK',
+                      style: TextStyle(
+                        fontSize: 64,
+                        fontWeight: FontWeight.w900,
+                        color: AppColors.textPrimary.withValues(alpha: 0.07),
+                        letterSpacing: 10,
+                      ),
                     ),
                   ),
                 ),
@@ -1079,6 +1172,62 @@ class _NavBtnState extends State<_NavBtn> {
               size: 28,
               color: Colors.white.withValues(
                   alpha: widget.enabled ? 0.88 : 0.22),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Jump-to-first/last button ─────────────────────────────────────────────────
+
+class _JumpBtn extends StatefulWidget {
+  const _JumpBtn({
+    required this.icon,
+    required this.tooltip,
+    required this.enabled,
+    required this.onTap,
+  });
+  final IconData icon;
+  final String tooltip;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  State<_JumpBtn> createState() => _JumpBtnState();
+}
+
+class _JumpBtnState extends State<_JumpBtn> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: widget.tooltip,
+      waitDuration: const Duration(milliseconds: 600),
+      child: MouseRegion(
+        cursor:
+            widget.enabled ? SystemMouseCursors.click : MouseCursor.defer,
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: GestureDetector(
+          onTap: widget.enabled ? widget.onTap : null,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 100),
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: _hovered && widget.enabled
+                  ? Colors.white.withValues(alpha: 0.18)
+                  : Colors.transparent,
+            ),
+            child: Icon(
+              widget.icon,
+              size: 18,
+              color: Colors.white.withValues(
+                  alpha: widget.enabled ? 0.55 : 0.18),
             ),
           ),
         ),
