@@ -2,6 +2,8 @@ import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 import '../daos/cards_dao.dart';
 import '../database/app_database.dart';
+import 'tag_repository.dart';
+import 'task_repository.dart';
 
 class CardRepository {
   CardRepository(this._dao);
@@ -83,4 +85,37 @@ class CardRepository {
 
   Future<void> deleteAllByStack(String stackId) =>
       _dao.deleteAllByStack(stackId);
+
+  /// Creates a new card dated today with copies of [incompleteTasks].
+  /// Column, title, description, priority, due date, rrule, and tags are
+  /// preserved. Kanban stage IDs are intentionally omitted.
+  /// Returns the new card's ID.
+  Future<String> carryForward(
+    AppCard source,
+    List<AppTask> incompleteTasks, {
+    required TaskRepository taskRepo,
+    required TagRepository tagRepo,
+  }) async {
+    final newCardId = await create(
+      stackId: source.stackId,
+      date: DateTime.now(),
+      projectTitle: source.projectTitle,
+    );
+    for (final task in incompleteTasks) {
+      final newTaskId = await taskRepo.create(
+        cardId: newCardId,
+        title: task.title,
+        column: task.columnName,
+        priority: task.priority,
+        description: task.description,
+        dueDate: task.dueDate,
+        rrule: task.rrule,
+      );
+      final tags = await tagRepo.watchByTask(task.id).first;
+      for (final tag in tags) {
+        await tagRepo.addToTask(newTaskId, tag.id);
+      }
+    }
+    return newCardId;
+  }
 }

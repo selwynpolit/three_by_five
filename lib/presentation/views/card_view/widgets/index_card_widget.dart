@@ -227,9 +227,9 @@ class _IndexCardWidgetState extends ConsumerState<IndexCardWidget> {
   }
 
   Future<void> _carryForward(BuildContext context, AppCard card) async {
-    final tasks =
-        await ref.read(taskRepositoryProvider).watchByCard(card.id).first;
-    final incomplete = tasks.where((t) => !t.isCompleted).toList();
+    final incomplete = (ref.read(tasksForCardProvider(card.id)).valueOrNull ?? [])
+        .where((t) => !t.isCompleted)
+        .toList();
 
     if (incomplete.isEmpty) {
       if (!context.mounted) return;
@@ -240,8 +240,7 @@ class _IndexCardWidgetState extends ConsumerState<IndexCardWidget> {
       return;
     }
 
-    final hasKanban = incomplete.any((t) => t.kanbanStageId != null);
-    if (hasKanban) {
+    if (incomplete.any((t) => t.kanbanStageId != null)) {
       if (!context.mounted) return;
       final proceed = await showDialog<bool>(
         context: context,
@@ -265,40 +264,19 @@ class _IndexCardWidgetState extends ConsumerState<IndexCardWidget> {
       if (proceed != true) return;
     }
 
-    final cardRepo = ref.read(cardRepositoryProvider);
-    final taskRepo = ref.read(taskRepositoryProvider);
-    final tagRepo = ref.read(tagRepositoryProvider);
-
-    final newCardId = await cardRepo.create(
-      stackId: card.stackId,
-      date: DateTime.now(),
-      projectTitle: card.projectTitle,
+    await ref.read(cardRepositoryProvider).carryForward(
+      card,
+      incomplete,
+      taskRepo: ref.read(taskRepositoryProvider),
+      tagRepo: ref.read(tagRepositoryProvider),
     );
 
-    for (final task in incomplete) {
-      final newTaskId = await taskRepo.create(
-        cardId: newCardId,
-        title: task.title,
-        column: task.columnName,
-        priority: task.priority,
-        description: task.description,
-        dueDate: task.dueDate,
-        rrule: task.rrule,
-        // kanbanStageId intentionally omitted — plain tasks only
-      );
-      final tags = await tagRepo.watchByTask(task.id).first;
-      for (final tag in tags) {
-        await tagRepo.addToTask(newTaskId, tag.id);
-      }
-    }
-
-    // Navigate to card view and surface the new card's stack.
+    if (!context.mounted) return;
     ref.read(activeViewProvider.notifier).set(AppView.cardView);
     final allStacks = ref.read(stacksProvider).valueOrNull ?? [];
-    final otherIds = allStacks
-        .where((s) => s.id != card.stackId)
-        .map((s) => s.id);
-    ref.read(hiddenStackIdsProvider.notifier).hideAll(otherIds);
+    ref.read(hiddenStackIdsProvider.notifier).hideAll(
+      allStacks.where((s) => s.id != card.stackId).map((s) => s.id),
+    );
     ref.read(activeStackIdProvider.notifier).set(card.stackId);
   }
 
