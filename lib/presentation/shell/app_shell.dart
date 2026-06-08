@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -300,6 +302,9 @@ class _ShellReadyState extends ConsumerState<_ShellReady> {
                 ),
               ),
 
+              // ── Alpha watermark (release builds only) ────────────
+              if (kReleaseMode) const _AlphaWatermark(),
+
               // ── Backdrop — dims + closes the panel on any tap outside it. ─
               // IgnorePointer(ignoring: true) when no task is selected so
               // card interactions are completely unaffected. When a task IS
@@ -391,6 +396,61 @@ class _ShellReadyState extends ConsumerState<_ShellReady> {
         AppView.todayView => const TodayView(),
         AppView.archiveView => const ArchiveView(),
       };
+}
+
+// ── Alpha watermark ───────────────────────────────────────────────────────────
+
+class _AlphaWatermark extends StatelessWidget {
+  const _AlphaWatermark();
+
+  @override
+  Widget build(BuildContext context) => const IgnorePointer(
+        child: CustomPaint(
+          painter: _AlphaWatermarkPainter(),
+          child: SizedBox.expand(),
+        ),
+      );
+}
+
+class _AlphaWatermarkPainter extends CustomPainter {
+  const _AlphaWatermarkPainter();
+
+  static const _xStep = 210.0;
+  static const _yStep = 100.0;
+  static const _angle = -math.pi / 6;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const style = TextStyle(
+      color: Color(0x16FFFFFF),
+      fontSize: 15,
+      fontWeight: FontWeight.w700,
+      letterSpacing: 2.0,
+      decoration: TextDecoration.none,
+    );
+    final tp = TextPainter(
+      text: const TextSpan(text: 'ALPHA RELEASE', style: style),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    canvas.save();
+    canvas.translate(size.width / 2, size.height / 2);
+    canvas.rotate(_angle);
+
+    final diagonal =
+        math.sqrt(size.width * size.width + size.height * size.height);
+    var row = 0;
+    for (var y = -diagonal; y < diagonal; y += _yStep, row++) {
+      final xOffset = (row % 2 == 0) ? 0.0 : _xStep / 2;
+      for (var x = -diagonal + xOffset; x < diagonal; x += _xStep) {
+        tp.paint(canvas, Offset(x, y));
+      }
+    }
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_AlphaWatermarkPainter _) => false;
 }
 
 // ── Splash ────────────────────────────────────────────────────────────────────
