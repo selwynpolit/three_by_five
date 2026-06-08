@@ -74,4 +74,13 @@ class CardRepository {
   Future<void> makeBoard(String id) => _dao.setStatus(id, 'expanded');
 
   Future<void> unboard(String id) => _dao.setStatus(id, 'active');
+
+  Future<List<AppCard>> getActiveByStack(String stackId) =>
+      _dao.getActiveByStack(stackId);
+
+  Future<void> moveAllActiveToStack(String fromStackId, String toStackId) =>
+      _dao.moveAllActiveToStack(fromStackId, toStackId);
+
+  Future<void> deleteAllByStack(String stackId) =>
+      _dao.deleteAllByStack(stackId);
 }

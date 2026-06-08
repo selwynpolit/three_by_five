@@ -8,10 +8,12 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_shadows.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../data/database/app_database.dart';
+import '../../../../domain/enums/app_view.dart';
 import '../../../../domain/undo/undo_action.dart';
 import '../../../providers/canvas_providers.dart';
 import '../../../providers/card_providers.dart';
 import '../../../providers/stack_providers.dart';
+import '../../../providers/tag_providers.dart';
 import '../../../providers/task_providers.dart';
 import '../../../providers/ui_state_providers.dart';
 import '../../../widgets/zoom_indicator.dart';
@@ -71,31 +73,28 @@ class _IndexCardWidgetState extends ConsumerState<IndexCardWidget> {
           globalPos.dx, globalPos.dy, globalPos.dx + 1, globalPos.dy + 1),
       items: [
         if (archived) ...[
-          const PopupMenuItem(value: 'restore', child: Text('Restore')),
-          const PopupMenuDivider(),
+          const PopupMenuItem(value: 'restore', height: 32, padding: EdgeInsets.symmetric(horizontal: 14), child: Text('Restore')),
+          const PopupMenuDivider(height: 1),
         ] else ...[
           if (hidden)
-            const PopupMenuItem(value: 'unhide', child: Text('Unhide'))
+            const PopupMenuItem(value: 'unhide', height: 32, padding: EdgeInsets.symmetric(horizontal: 14), child: Text('Unhide'))
           else ...[
-            const PopupMenuItem(value: 'hide', child: Text('Hide')),
-            const PopupMenuItem(
-                value: 'snooze', child: Text('Snooze until…')),
+            const PopupMenuItem(value: 'hide', height: 32, padding: EdgeInsets.symmetric(horizontal: 14), child: Text('Hide')),
+            const PopupMenuItem(value: 'snooze', height: 32, padding: EdgeInsets.symmetric(horizontal: 14), child: Text('Snooze until…')),
           ],
-          const PopupMenuDivider(),
-          const PopupMenuItem(
-              value: 'kanban', child: Text('Kanban view…')),
-          const PopupMenuDivider(),
-          const PopupMenuItem(
-              value: 'move_stack', child: Text('Move to stack…')),
-          const PopupMenuDivider(),
-          const PopupMenuItem(
-              value: 'del_completed',
-              child: Text('Delete completed tasks')),
-          const PopupMenuDivider(),
-          const PopupMenuItem(value: 'archive', child: Text('Archive')),
-          const PopupMenuDivider(),
+          const PopupMenuDivider(height: 1),
+          const PopupMenuItem(value: 'kanban', height: 32, padding: EdgeInsets.symmetric(horizontal: 14), child: Text('Kanban view…')),
+          const PopupMenuDivider(height: 1),
+          const PopupMenuItem(value: 'move_stack', height: 32, padding: EdgeInsets.symmetric(horizontal: 14), child: Text('Move to stack…')),
+          const PopupMenuDivider(height: 1),
+          const PopupMenuItem(value: 'carry_forward', height: 32, padding: EdgeInsets.symmetric(horizontal: 14), child: Text('Carry Forward')),
+          const PopupMenuDivider(height: 1),
+          const PopupMenuItem(value: 'del_completed', height: 32, padding: EdgeInsets.symmetric(horizontal: 14), child: Text('Delete completed tasks')),
+          const PopupMenuDivider(height: 1),
+          const PopupMenuItem(value: 'archive', height: 32, padding: EdgeInsets.symmetric(horizontal: 14), child: Text('Archive')),
+          const PopupMenuDivider(height: 1),
         ],
-        const PopupMenuItem(value: 'delete', child: Text('Delete')),
+        const PopupMenuItem(value: 'delete', height: 32, padding: EdgeInsets.symmetric(horizontal: 14), child: Text('Delete')),
       ],
     );
 
@@ -118,6 +117,8 @@ class _IndexCardWidgetState extends ConsumerState<IndexCardWidget> {
         if (context.mounted) await showCardKanbanDialog(context, card);
       case 'move_stack':
         if (context.mounted) await _showMoveToStackMenu(context, globalPos, card.id);
+      case 'carry_forward':
+        if (context.mounted) await _carryForward(context, card);
       case 'del_completed':
         await ref.read(taskRepositoryProvider).deleteCompletedForCard(card.id);
       case 'archive':
@@ -139,13 +140,11 @@ class _IndexCardWidgetState extends ConsumerState<IndexCardWidget> {
       position: RelativeRect.fromLTRB(
           pos.dx + 12, pos.dy + 40, pos.dx + 13, pos.dy + 41),
       items: const [
-        PopupMenuItem(value: '2h', child: Text('For 2 hours')),
-        PopupMenuItem(
-            value: 'tonight', child: Text('Until tonight (8 pm)')),
-        PopupMenuItem(
-            value: 'tomorrow', child: Text('Until tomorrow (8 am)')),
-        PopupMenuItem(value: 'week', child: Text('For a week')),
-        PopupMenuItem(value: 'pick', child: Text('Pick a date…')),
+        PopupMenuItem(value: '2h', height: 32, padding: EdgeInsets.symmetric(horizontal: 14), child: Text('For 2 hours')),
+        PopupMenuItem(value: 'tonight', height: 32, padding: EdgeInsets.symmetric(horizontal: 14), child: Text('Until tonight (8 pm)')),
+        PopupMenuItem(value: 'tomorrow', height: 32, padding: EdgeInsets.symmetric(horizontal: 14), child: Text('Until tomorrow (8 am)')),
+        PopupMenuItem(value: 'week', height: 32, padding: EdgeInsets.symmetric(horizontal: 14), child: Text('For a week')),
+        PopupMenuItem(value: 'pick', height: 32, padding: EdgeInsets.symmetric(horizontal: 14), child: Text('Pick a date…')),
       ],
     );
 
@@ -202,6 +201,8 @@ class _IndexCardWidgetState extends ConsumerState<IndexCardWidget> {
       items: stacks
           .map((s) => PopupMenuItem(
                 value: s.id,
+                height: 32,
+                padding: const EdgeInsets.symmetric(horizontal: 14),
                 enabled: s.id != widget.card.stackId,
                 child: Row(
                   children: [
@@ -223,6 +224,82 @@ class _IndexCardWidgetState extends ConsumerState<IndexCardWidget> {
     if (result != null && result != widget.card.stackId) {
       await ref.read(cardRepositoryProvider).moveToStack(cardId, result);
     }
+  }
+
+  Future<void> _carryForward(BuildContext context, AppCard card) async {
+    final tasks =
+        await ref.read(taskRepositoryProvider).watchByCard(card.id).first;
+    final incomplete = tasks.where((t) => !t.isCompleted).toList();
+
+    if (incomplete.isEmpty) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Nothing to carry forward — all tasks are complete'),
+        duration: Duration(seconds: 3),
+      ));
+      return;
+    }
+
+    final hasKanban = incomplete.any((t) => t.kanbanStageId != null);
+    if (hasKanban) {
+      if (!context.mounted) return;
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Carry Forward'),
+          content: const Text(
+              'This card has Kanban tasks. Carried forward tasks will not '
+              'be assigned to Kanban columns. Continue?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Continue'),
+            ),
+          ],
+        ),
+      );
+      if (proceed != true) return;
+    }
+
+    final cardRepo = ref.read(cardRepositoryProvider);
+    final taskRepo = ref.read(taskRepositoryProvider);
+    final tagRepo = ref.read(tagRepositoryProvider);
+
+    final newCardId = await cardRepo.create(
+      stackId: card.stackId,
+      date: DateTime.now(),
+      projectTitle: card.projectTitle,
+    );
+
+    for (final task in incomplete) {
+      final newTaskId = await taskRepo.create(
+        cardId: newCardId,
+        title: task.title,
+        column: task.columnName,
+        priority: task.priority,
+        description: task.description,
+        dueDate: task.dueDate,
+        rrule: task.rrule,
+        // kanbanStageId intentionally omitted — plain tasks only
+      );
+      final tags = await tagRepo.watchByTask(task.id).first;
+      for (final tag in tags) {
+        await tagRepo.addToTask(newTaskId, tag.id);
+      }
+    }
+
+    // Navigate to card view and surface the new card's stack.
+    ref.read(activeViewProvider.notifier).set(AppView.cardView);
+    final allStacks = ref.read(stacksProvider).valueOrNull ?? [];
+    final otherIds = allStacks
+        .where((s) => s.id != card.stackId)
+        .map((s) => s.id);
+    ref.read(hiddenStackIdsProvider.notifier).hideAll(otherIds);
+    ref.read(activeStackIdProvider.notifier).set(card.stackId);
   }
 
   // ── Build ────────────────────────────────────────────────────────────────────
@@ -256,7 +333,37 @@ class _IndexCardWidgetState extends ConsumerState<IndexCardWidget> {
 
     final scale = CardZoomData.of(context);
 
-    return MouseRegion(
+    return Draggable<String>(
+      data: widget.card.id,
+      feedback: Material(
+        elevation: 8,
+        color: Colors.transparent,
+        child: Container(
+          width: 200,
+          height: 44,
+          decoration: BoxDecoration(
+            color: widget.stackColor,
+            borderRadius: BorderRadius.circular(6),
+            boxShadow: const [
+              BoxShadow(
+                  color: Color(0x44000000), blurRadius: 12, offset: Offset(0, 4))
+            ],
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          alignment: Alignment.centerLeft,
+          child: Text(
+            widget.card.projectTitle ??
+                DateFormat('d MMM').format(widget.card.date),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ),
+      child: MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
@@ -402,8 +509,9 @@ class _IndexCardWidgetState extends ConsumerState<IndexCardWidget> {
           ],
           ),   // Column
         ),     // MediaQuery
-      ),
-    );
+      ),       // AnimatedContainer
+    ),         // MouseRegion (Draggable child)
+    );         // Draggable
   }
 
   Color get _cardTintedColor {

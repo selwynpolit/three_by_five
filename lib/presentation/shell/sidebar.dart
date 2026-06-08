@@ -4,12 +4,166 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
+import '../../data/database/app_database.dart';
 import '../../domain/enums/app_view.dart';
 import '../providers/canvas_providers.dart';
+import '../providers/card_providers.dart';
 import '../providers/export_providers.dart';
 import '../providers/stack_providers.dart';
 import '../providers/ui_state_providers.dart';
 import 'app_view_x.dart';
+
+// ── Top-level helpers (called from both header + right-click) ─────────────────
+
+Future<void> showAddStackDialog(BuildContext context, WidgetRef ref) async {
+  final result = await showDialog<({String name, Color color})>(
+    context: context,
+    builder: (_) => const _AddStackDialog(),
+  );
+  if (result == null) return;
+  final id = await ref
+      .read(stackRepositoryProvider)
+      .create(name: result.name, color: result.color.toARGB32());
+  ref.read(activeStackIdProvider.notifier).set(id);
+}
+
+// ── Add stack dialog ──────────────────────────────────────────────────────────
+
+class _AddStackDialog extends StatefulWidget {
+  const _AddStackDialog();
+
+  @override
+  State<_AddStackDialog> createState() => _AddStackDialogState();
+}
+
+class _AddStackDialogState extends State<_AddStackDialog> {
+  final _ctrl = TextEditingController();
+  Color _color = AppColors.stackPalette[1];
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final name = _ctrl.text.trim();
+    if (name.isEmpty) return;
+    Navigator.pop(context, (name: name, color: _color));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('New Stack'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: _ctrl,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'Stack name',
+              isDense: true,
+            ),
+            onSubmitted: (_) => _submit(),
+          ),
+          const SizedBox(height: 14),
+          Text('Color', style: Theme.of(context).textTheme.labelMedium),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: AppColors.stackPalette.map((c) {
+              final active = c == _color;
+              return GestureDetector(
+                onTap: () => setState(() => _color = c),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 120),
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    color: c,
+                    shape: BoxShape.circle,
+                    border: active
+                        ? Border.all(color: AppColors.textPrimary, width: 2)
+                        : null,
+                    boxShadow: active
+                        ? [BoxShadow(color: c.withValues(alpha: 0.4), blurRadius: 4)]
+                        : null,
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        TextButton(onPressed: _submit, child: const Text('Create')),
+      ],
+    );
+  }
+}
+
+// ── Rename stack dialog ───────────────────────────────────────────────────────
+
+class _RenameDialog extends StatefulWidget {
+  const _RenameDialog({required this.initialName});
+  final String initialName;
+
+  @override
+  State<_RenameDialog> createState() => _RenameDialogState();
+}
+
+class _RenameDialogState extends State<_RenameDialog> {
+  late final TextEditingController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController(text: widget.initialName);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final name = _ctrl.text.trim();
+    if (name.isEmpty) return;
+    Navigator.pop(context, name);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Rename Stack'),
+      content: TextField(
+        controller: _ctrl,
+        autofocus: true,
+        decoration:
+            const InputDecoration(labelText: 'Stack name', isDense: true),
+        onSubmitted: (_) => _submit(),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        TextButton(onPressed: _submit, child: const Text('Rename')),
+      ],
+    );
+  }
+}
+
+// ── Sidebar ───────────────────────────────────────────────────────────────────
 
 class Sidebar extends ConsumerWidget {
   const Sidebar({super.key});
@@ -27,6 +181,7 @@ class Sidebar extends ConsumerWidget {
     final stacks = ref.watch(stacksProvider);
     final activeStackId = ref.watch(activeStackIdProvider);
     final activeView = ref.watch(activeViewProvider);
+    final hiddenIds = ref.watch(hiddenStackIdsProvider);
 
     return Container(
       width: AppSpacing.sidebarWidth,
@@ -61,61 +216,60 @@ class Sidebar extends ConsumerWidget {
 
           stacks.when(
             data: (list) {
-              final hiddenIds = ref.watch(hiddenStackIdsProvider);
               final allVisible = hiddenIds.isEmpty;
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // ── Master "Show All" row ─────────────────────────────────
+                  // ── Master "Show All" row ──────────────────────────────────
                   _AllStacksRow(
                     allVisible: allVisible,
                     onTap: () {
-                      // Always show all — never hide everything from here.
                       ref.read(hiddenStackIdsProvider.notifier).showAll();
+                      ref.read(activeStackIdProvider.notifier).set(null);
                       if (activeView == AppView.archiveView) {
                         ref
                             .read(activeViewProvider.notifier)
                             .set(AppView.cardView);
                       }
                     },
+                    onRightClick: (pos) async {
+                      final result = await showMenu<String>(
+                        context: context,
+                        position: RelativeRect.fromLTRB(
+                            pos.dx, pos.dy, pos.dx + 1, pos.dy + 1),
+                        items: [
+                          const PopupMenuItem(
+                            value: 'add',
+                            height: 32,
+                            padding: EdgeInsets.symmetric(horizontal: 14),
+                            child: Text('Add Stack'),
+                          ),
+                        ],
+                      );
+                      if (result == 'add' && context.mounted) {
+                        await showAddStackDialog(context, ref);
+                      }
+                    },
                   ),
-                  // ── Individual stacks ─────────────────────────────────────
+
+                  // ── Individual stacks ──────────────────────────────────────
                   ...list.map((s) => _StackItem(
-                        label: s.name,
-                        dotColor: Color(s.color),
+                        stack: s,
+                        allStacks: list,
                         isSelected: activeStackId == s.id,
-                        isVisible: !hiddenIds.contains(s.id),
                         onTap: () {
-                          // Clicking a stack name: show ONLY this stack by
-                          // hiding all others.  This is the "navigate to stack"
-                          // action and also sets the creation target.
-                          final otherIds = list
-                              .where((o) => o.id != s.id)
-                              .map((o) => o.id);
+                          final otherIds =
+                              list.where((o) => o.id != s.id).map((o) => o.id);
                           ref
                               .read(hiddenStackIdsProvider.notifier)
                               .hideAll(otherIds);
-                          ref.read(activeStackIdProvider.notifier).set(s.id);
+                          ref
+                              .read(activeStackIdProvider.notifier)
+                              .set(s.id);
                           if (activeView == AppView.archiveView) {
                             ref
                                 .read(activeViewProvider.notifier)
                                 .set(AppView.cardView);
-                          }
-                        },
-                        onToggleVisible: () => ref
-                            .read(hiddenStackIdsProvider.notifier)
-                            .toggle(s.id),
-                        onDelete: () async {
-                          await ref
-                              .read(stackRepositoryProvider)
-                              .delete(s.id);
-                          ref
-                              .read(hiddenStackIdsProvider.notifier)
-                              .toggle(s.id); // remove from hidden too
-                          if (ref.read(activeStackIdProvider) == s.id) {
-                            ref
-                                .read(activeStackIdProvider.notifier)
-                                .set(null);
                           }
                         },
                       )),
@@ -143,8 +297,7 @@ class Sidebar extends ConsumerWidget {
             (v) => _ViewNavItem(
               view: v,
               isSelected: activeView == v,
-              onTap: () =>
-                  ref.read(activeViewProvider.notifier).set(v),
+              onTap: () => ref.read(activeViewProvider.notifier).set(v),
             ),
           ),
 
@@ -172,15 +325,12 @@ class _SectionLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 0, 18, 0),
-      child: Text(
-        text,
-        style: Theme.of(context).textTheme.labelMedium,
-      ),
+      child: Text(text, style: Theme.of(context).textTheme.labelMedium),
     );
   }
 }
 
-// ── Stacks section header (label + add button) ────────────────────────────────
+// ── Stacks section header ─────────────────────────────────────────────────────
 
 class _StacksSectionHeader extends ConsumerStatefulWidget {
   @override
@@ -191,91 +341,6 @@ class _StacksSectionHeader extends ConsumerStatefulWidget {
 class _StacksSectionHeaderState extends ConsumerState<_StacksSectionHeader> {
   bool _hovered = false;
 
-  Future<void> _showAddDialog(BuildContext context) async {
-    final controller = TextEditingController();
-    var selectedColor = AppColors.stackPalette[1]; // default non-blue
-
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setS) => AlertDialog(
-          title: const Text('New Stack'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TextField(
-                controller: controller,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  labelText: 'Stack name',
-                  isDense: true,
-                ),
-                onSubmitted: (_) => _create(ctx, controller, selectedColor),
-              ),
-              const SizedBox(height: 14),
-              Text('Color',
-                  style: Theme.of(ctx).textTheme.labelMedium),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: AppColors.stackPalette.map((c) {
-                  final active = c == selectedColor;
-                  return GestureDetector(
-                    onTap: () => setS(() => selectedColor = c),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 120),
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        color: c,
-                        shape: BoxShape.circle,
-                        border: active
-                            ? Border.all(
-                                color: AppColors.textPrimary, width: 2)
-                            : null,
-                        boxShadow: active
-                            ? [
-                                BoxShadow(
-                                    color: c.withValues(alpha: 0.4),
-                                    blurRadius: 4)
-                              ]
-                            : null,
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => _create(ctx, controller, selectedColor),
-              child: const Text('Create'),
-            ),
-          ],
-        ),
-      ),
-    );
-    controller.dispose();
-  }
-
-  Future<void> _create(BuildContext ctx, TextEditingController controller,
-      Color color) async {
-    final name = controller.text.trim();
-    if (name.isEmpty) return;
-    final id = await ref
-        .read(stackRepositoryProvider)
-        .create(name: name, color: color.toARGB32());
-    if (ctx.mounted) Navigator.pop(ctx);
-    ref.read(activeStackIdProvider.notifier).set(id);
-  }
-
   @override
   Widget build(BuildContext context) {
     return MouseRegion(
@@ -285,14 +350,13 @@ class _StacksSectionHeaderState extends ConsumerState<_StacksSectionHeader> {
         padding: const EdgeInsets.fromLTRB(18, 0, 8, 0),
         child: Row(
           children: [
-            Text('STACKS',
-                style: Theme.of(context).textTheme.labelMedium),
+            Text('STACKS', style: Theme.of(context).textTheme.labelMedium),
             const Spacer(),
             AnimatedOpacity(
               duration: const Duration(milliseconds: 120),
               opacity: _hovered ? 1.0 : 0.0,
               child: GestureDetector(
-                onTap: () => _showAddDialog(context),
+                onTap: () => showAddStackDialog(context, ref),
                 child: MouseRegion(
                   cursor: SystemMouseCursors.click,
                   child: Icon(Icons.add,
@@ -310,9 +374,14 @@ class _StacksSectionHeaderState extends ConsumerState<_StacksSectionHeader> {
 // ── "All stacks" master row ───────────────────────────────────────────────────
 
 class _AllStacksRow extends StatefulWidget {
-  const _AllStacksRow({required this.allVisible, required this.onTap});
+  const _AllStacksRow({
+    required this.allVisible,
+    required this.onTap,
+    required this.onRightClick,
+  });
   final bool allVisible;
   final VoidCallback onTap;
+  final void Function(Offset) onRightClick;
 
   @override
   State<_AllStacksRow> createState() => _AllStacksRowState();
@@ -320,45 +389,82 @@ class _AllStacksRow extends StatefulWidget {
 
 class _AllStacksRowState extends State<_AllStacksRow> {
   bool _hovered = false;
+  bool _dragOver = false;
 
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-          decoration: BoxDecoration(
-            color: _hovered ? AppColors.sidebarHover : Colors.transparent,
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 16,
-                height: 16,
-                child: Checkbox(
-                  value: widget.allVisible,
-                  onChanged: (_) => widget.onTap(),
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  visualDensity: VisualDensity.compact,
-                  side: const BorderSide(color: AppColors.textTertiary, width: 1.5),
-                ),
+    final isActive = widget.allVisible;
+    return GestureDetector(
+      onSecondaryTapUp: (d) => widget.onRightClick(d.globalPosition),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: DragTarget<String>(
+          onWillAcceptWithDetails: (_) {
+            setState(() => _dragOver = true);
+            return true;
+          },
+          onLeave: (_) => setState(() => _dragOver = false),
+          onAcceptWithDetails: (_) => setState(() => _dragOver = false),
+          builder: (ctx, candidateData, _) => GestureDetector(
+            onTap: widget.onTap,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
+              margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
+              decoration: BoxDecoration(
+                color: _dragOver
+                    ? AppColors.accent.withValues(alpha: 0.08)
+                    : _hovered
+                        ? AppColors.sidebarHover
+                        : Colors.transparent,
+                borderRadius: BorderRadius.circular(6),
               ),
-              const SizedBox(width: 8),
-              Text(
-                'All Stacks',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppColors.textSecondary,
-                      fontWeight: FontWeight.w500,
+              child: Row(
+                children: [
+                  // Left accent bar
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    width: 3,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: isActive
+                          ? AppColors.accent.withValues(alpha: 0.55)
+                          : Colors.transparent,
+                      borderRadius: const BorderRadius.only(
+                        topRight: Radius.circular(2),
+                        bottomRight: Radius.circular(2),
+                      ),
                     ),
+                  ),
+                  const SizedBox(width: 7),
+                  Icon(
+                    Icons.layers_outlined,
+                    size: 13,
+                    color: isActive
+                        ? AppColors.accent
+                        : AppColors.textTertiary,
+                  ),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 7),
+                      child: Text(
+                        'All Stacks',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: isActive
+                                  ? AppColors.accent
+                                  : AppColors.textSecondary,
+                              fontWeight: isActive
+                                  ? FontWeight.w600
+                                  : FontWeight.w400,
+                            ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -368,142 +474,352 @@ class _AllStacksRowState extends State<_AllStacksRow> {
 
 // ── Stack item ────────────────────────────────────────────────────────────────
 
-class _StackItem extends StatefulWidget {
+class _StackItem extends ConsumerStatefulWidget {
   const _StackItem({
-    required this.label,
-    required this.dotColor,
+    required this.stack,
+    required this.allStacks,
     required this.isSelected,
-    required this.isVisible,
     required this.onTap,
-    required this.onToggleVisible,
-    this.onDelete,
   });
 
-  final String label;
-  final Color dotColor;
+  final AppStack stack;
+  final List<AppStack> allStacks;
   final bool isSelected;
-  final bool isVisible;
   final VoidCallback onTap;
-  final VoidCallback onToggleVisible;
-  final Future<void> Function()? onDelete;
 
   @override
-  State<_StackItem> createState() => _StackItemState();
+  ConsumerState<_StackItem> createState() => _StackItemState();
 }
 
-class _StackItemState extends State<_StackItem> {
+class _StackItemState extends ConsumerState<_StackItem> {
   bool _hovered = false;
+  bool _dragOver = false;
 
-  Future<void> _confirmDelete() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete stack?'),
-        content: const Text(
-            'The stack will be removed from the sidebar. Cards in this '
-            'stack will remain accessible via All Cards.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: TextButton.styleFrom(
-                foregroundColor: AppColors.overdueText),
-            child: const Text('Delete'),
+  Color get _dotColor => Color(widget.stack.color);
+
+  Future<void> _showContextMenu(BuildContext ctx, Offset pos) async {
+    final isLast = widget.allStacks.length <= 1;
+
+    final result = await showMenu<String>(
+      context: ctx,
+      position: RelativeRect.fromLTRB(pos.dx, pos.dy, pos.dx + 1, pos.dy + 1),
+      items: [
+        const PopupMenuItem(
+          value: 'add',
+          height: 32,
+          padding: EdgeInsets.symmetric(horizontal: 14),
+          child: Text('Add Stack'),
+        ),
+        const PopupMenuItem(
+          value: 'rename',
+          height: 32,
+          padding: EdgeInsets.symmetric(horizontal: 14),
+          child: Text('Rename'),
+        ),
+        const PopupMenuDivider(height: 1),
+        PopupMenuItem(
+          value: 'delete',
+          height: 32,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          enabled: !isLast,
+          child: Tooltip(
+            message: isLast ? 'You must have at least one stack' : '',
+            child: Text(
+              'Delete',
+              style: TextStyle(
+                color: isLast ? AppColors.textDisabled : AppColors.overdueText,
+              ),
+            ),
           ),
-        ],
+        ),
+      ],
+    );
+
+    if (!ctx.mounted) return;
+
+    // Let the menu route fully unmount before opening any secondary dialog.
+    // Showing a dialog immediately after showMenu can cause an InheritedElement
+    // dependents assertion because the popup route elements haven't been
+    // disposed yet when the next route is pushed.
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+
+    switch (result) {
+      case 'add':
+        await showAddStackDialog(context, ref);
+      case 'rename':
+        await _confirmRename();
+      case 'delete':
+        await _confirmDelete(context);
+    }
+  }
+
+  Future<void> _confirmRename() async {
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (_) => _RenameDialog(initialName: widget.stack.name),
+    );
+    if (newName == null || !mounted) return;
+    await ref.read(stackRepositoryProvider).rename(widget.stack.id, newName);
+  }
+
+  Future<void> _confirmDelete(BuildContext ctx) async {
+    final remaining = widget.allStacks
+        .where((s) => s.id != widget.stack.id)
+        .toList();
+    if (remaining.isEmpty) return;
+
+    await showDialog<void>(
+      context: ctx,
+      builder: (dCtx) => _DeleteStackDialog(
+        stack: widget.stack,
+        remainingStacks: remaining,
       ),
     );
-    if (confirmed == true) await widget.onDelete?.call();
+  }
+
+  Future<void> _onCardDropped(String cardId) async {
+    setState(() => _dragOver = false);
+    final card = await ref.read(cardRepositoryProvider).getById(cardId);
+    if (card == null || card.stackId == widget.stack.id) return;
+    await ref.read(cardRepositoryProvider).moveToStack(cardId, widget.stack.id);
   }
 
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-          decoration: BoxDecoration(
-            color: widget.isSelected
-                ? AppColors.sidebarSelected
-                : _hovered
-                    ? AppColors.sidebarHover
-                    : Colors.transparent,
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Opacity(
-            opacity: widget.isVisible ? 1.0 : 0.45,
-            child: Row(
-              children: [
-                // Visibility checkbox (uses stack color when checked)
-                GestureDetector(
-                  onTap: widget.onToggleVisible,
-                  child: SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: Checkbox(
-                      value: widget.isVisible,
-                      onChanged: (_) => widget.onToggleVisible(),
-                      activeColor: widget.dotColor,
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      visualDensity: VisualDensity.compact,
-                      side: BorderSide(
-                          color: widget.dotColor.withValues(alpha: 0.6),
-                          width: 1.5),
+    return GestureDetector(
+      onSecondaryTapUp: (d) => _showContextMenu(context, d.globalPosition),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: DragTarget<String>(
+          onWillAcceptWithDetails: (_) {
+            setState(() => _dragOver = true);
+            return true;
+          },
+          onLeave: (_) => setState(() => _dragOver = false),
+          onAcceptWithDetails: (d) => _onCardDropped(d.data),
+          builder: (ctx, candidateData, _) => GestureDetector(
+            onTap: widget.onTap,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
+              margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
+              decoration: BoxDecoration(
+                color: _dragOver
+                    ? _dotColor.withValues(alpha: 0.10)
+                    : widget.isSelected
+                        ? AppColors.sidebarSelected
+                        : _hovered
+                            ? AppColors.sidebarHover
+                            : Colors.transparent,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Row(
+                children: [
+                  // Left accent bar (stack color when selected)
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    width: 3,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: widget.isSelected
+                          ? _dotColor
+                          : Colors.transparent,
+                      borderRadius: const BorderRadius.only(
+                        topRight: Radius.circular(2),
+                        bottomRight: Radius.circular(2),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                // Stack color dot
-                Container(
-                  width: 7,
-                  height: 7,
-                  decoration: BoxDecoration(
-                    color: widget.dotColor,
-                    shape: BoxShape.circle,
+                  const SizedBox(width: 7),
+                  // Stack color dot
+                  Container(
+                    width: 7,
+                    height: 7,
+                    decoration: BoxDecoration(
+                      color: _dotColor,
+                      shape: BoxShape.circle,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 7),
-                Expanded(
-                  child: Text(
-                    widget.label,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: widget.isSelected
-                              ? AppColors.textPrimary
-                              : AppColors.textSecondary,
-                          fontWeight: widget.isSelected
-                              ? FontWeight.w600
-                              : FontWeight.w400,
-                        ),
+                  const SizedBox(width: 7),
+                  // Stack name
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 7),
+                      child: Text(
+                        widget.stack.name,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: widget.isSelected
+                                  ? AppColors.textPrimary
+                                  : AppColors.textSecondary,
+                              fontWeight: widget.isSelected
+                                  ? FontWeight.w600
+                                  : FontWeight.w400,
+                            ),
+                      ),
+                    ),
                   ),
-                ),
-                // Delete button — hover-reveal
-                if (widget.onDelete != null)
+                  // Delete/rename button — hover-reveal
                   AnimatedOpacity(
                     duration: const Duration(milliseconds: 120),
                     opacity: _hovered ? 1.0 : 0.0,
                     child: GestureDetector(
-                      onTap: _confirmDelete,
+                      onTap: () =>
+                          _showContextMenu(context, _menuOffset(context)),
                       child: Padding(
-                        padding: const EdgeInsets.only(left: 4),
-                        child: Icon(Icons.close,
-                            size: 12, color: AppColors.textTertiary),
+                        padding: const EdgeInsets.only(right: 8, left: 4),
+                        child: Icon(Icons.more_horiz,
+                            size: 14, color: AppColors.textTertiary),
                       ),
                     ),
                   ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Offset _menuOffset(BuildContext context) {
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null) return Offset.zero;
+    return box.localToGlobal(Offset(box.size.width, box.size.height / 2));
+  }
+}
+
+// ── Delete stack dialog ───────────────────────────────────────────────────────
+
+class _DeleteStackDialog extends ConsumerStatefulWidget {
+  const _DeleteStackDialog({
+    required this.stack,
+    required this.remainingStacks,
+  });
+
+  final AppStack stack;
+  final List<AppStack> remainingStacks;
+
+  @override
+  ConsumerState<_DeleteStackDialog> createState() => _DeleteStackDialogState();
+}
+
+class _DeleteStackDialogState extends ConsumerState<_DeleteStackDialog> {
+  late String _targetStackId;
+  bool _deleteCards = false;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _targetStackId = widget.remainingStacks.first.id;
+  }
+
+  Future<void> _confirm() async {
+    setState(() => _busy = true);
+    try {
+      final cardRepo = ref.read(cardRepositoryProvider);
+      final stackRepo = ref.read(stackRepositoryProvider);
+
+      if (_deleteCards) {
+        await cardRepo.deleteAllByStack(widget.stack.id);
+      } else {
+        await cardRepo.moveAllActiveToStack(widget.stack.id, _targetStackId);
+      }
+
+      await stackRepo.delete(widget.stack.id);
+
+      // Housekeep active stack and hidden stack state.
+      if (ref.read(activeStackIdProvider) == widget.stack.id) {
+        ref.read(activeStackIdProvider.notifier).set(_targetStackId);
+      }
+      ref.read(hiddenStackIdsProvider.notifier).remove(widget.stack.id);
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+        Navigator.pop(context);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('Delete "${widget.stack.name}"?'),
+      content: RadioGroup<bool>(
+        groupValue: _deleteCards,
+        onChanged: (v) => setState(() => _deleteCards = v!),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Move option (default)
+            const RadioListTile<bool>(
+              value: false,
+              contentPadding: EdgeInsets.zero,
+              title: Text('Move cards to'),
+            ),
+            if (!_deleteCards)
+              Padding(
+                padding: const EdgeInsets.only(left: 36, bottom: 8),
+                child: DropdownButton<String>(
+                  value: _targetStackId,
+                  isExpanded: true,
+                  items: widget.remainingStacks
+                      .map((s) => DropdownMenuItem(
+                            value: s.id,
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 10,
+                                  height: 10,
+                                  margin: const EdgeInsets.only(right: 8),
+                                  decoration: BoxDecoration(
+                                    color: Color(s.color),
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                Text(s.name),
+                              ],
+                            ),
+                          ))
+                      .toList(),
+                  onChanged: (id) {
+                    if (id != null) setState(() => _targetStackId = id);
+                  },
+                ),
+              ),
+            // Delete-all option
+            const RadioListTile<bool>(
+              value: true,
+              contentPadding: EdgeInsets.zero,
+              title: Text('Delete all cards in this stack'),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: _busy ? null : _confirm,
+          style: TextButton.styleFrom(
+            foregroundColor:
+                _deleteCards ? AppColors.overdueText : AppColors.accent,
+          ),
+          child: _busy
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 1.5),
+                )
+              : Text(_deleteCards ? 'Delete All' : 'Move & Delete Stack'),
+        ),
+      ],
     );
   }
 }

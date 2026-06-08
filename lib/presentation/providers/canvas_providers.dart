@@ -128,4 +128,6 @@ class HiddenStackIdsNotifier extends Notifier<Set<String>> {
   void showAll() => state = const {};
 
   void hideAll(Iterable<String> ids) => state = Set.from(ids);
+
+  void remove(String id) => state = Set.from(state)..remove(id);
 }

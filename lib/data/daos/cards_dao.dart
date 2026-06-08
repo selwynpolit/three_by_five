@@ -140,4 +140,31 @@ class CardsDao {
           updatedAt: Value(DateTime.now()),
         ),
       );
+
+  Future<List<AppCard>> getActiveByStack(String stackId) =>
+      (_db.select(_db.cards)
+            ..where((c) =>
+                c.stackId.equals(stackId) &
+                c.deletedAt.isNull() &
+                c.status.equals('archived').not()))
+          .get();
+
+  Future<void> moveAllActiveToStack(String fromStackId, String toStackId) =>
+      (_db.update(_db.cards)
+            ..where((c) =>
+                c.stackId.equals(fromStackId) &
+                c.deletedAt.isNull() &
+                c.status.equals('archived').not()))
+          .write(CardsCompanion(
+            stackId: Value(toStackId),
+            updatedAt: Value(DateTime.now()),
+          ));
+
+  Future<void> deleteAllByStack(String stackId) =>
+      (_db.update(_db.cards)
+            ..where((c) => c.stackId.equals(stackId) & c.deletedAt.isNull()))
+          .write(CardsCompanion(
+            deletedAt: Value(DateTime.now()),
+            updatedAt: Value(DateTime.now()),
+          ));
 }
