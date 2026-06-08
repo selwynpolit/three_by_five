@@ -47,7 +47,7 @@ The three-state sort cycle (ascending → descending → unsorted) means you can
 
 **⌘K is your fastest tool.** Once you get used to global search, you'll rarely scroll looking for something. Type a word you remember and the result is usually on screen within a second.
 
-**Right-click everything.** Cards, task rows, column headers — most of them have context menus with useful options. The right-click menu on a card gives you hide, snooze, archive, and more.
+**Right-click everything.** Cards, task rows, stack names, column headers — most of them have context menus with useful options. The right-click menu on a card gives you hide, snooze, carry forward, archive, and more. The right-click menu on a stack name lets you add, rename, or delete stacks without hunting for a button.
 
 **The free canvas is a thinking tool.** When you're planning a project, switch to the Free Canvas (third icon in Card View), spread your related cards out, and arrange them how your brain thinks about them. Positions are saved, so you can come back to that arrangement.
 
@@ -56,6 +56,8 @@ The three-state sort cycle (ascending → descending → unsorted) means you can
 **Archive, don't delete.** It's tempting to delete completed cards to keep things tidy, but archiving them keeps a history you might want later. Archive View (⌘5) is low-traffic — it won't clutter your working view.
 
 **"Delete completed tasks" for a clean slate.** When you finish a productive sprint, right-click the card and use "Delete completed tasks" to clear out the done items. The card stays, but the noise is gone.
+
+**Carry Forward instead of editing.** At the end of a day or week, you often have a card with a mix of done and not-done tasks. Instead of editing that card, right-click it and choose **Carry Forward**. 3by5 creates a fresh card dated today containing only the unfinished tasks, with all the detail (priority, due date, tags) intact. The original card is untouched — a natural record of what you planned. Think of it as a cleaner version of crossing things off and rewriting them on a new card.
 
 **The dot indicator in Stack View is a jump menu.** If you have a lot of cards and you know roughly where the one you want is in the deck, click a dot near that position instead of flipping one by one.
 

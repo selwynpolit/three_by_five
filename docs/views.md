@@ -46,6 +46,8 @@ The search bar at the top filters tasks by title or card name. The "Hide complet
 
 A month grid showing incomplete tasks that have a due date. Days with tasks are highlighted — click a day and its tasks appear in a list on the right side of the screen. Click any task in that list to open its detail panel.
 
+Task chips in the month grid show as much of the title as fits the cell. When a title is too long to fit, hovering over the chip shows a tooltip with the full title and, if set, the priority and due date below in a smaller muted line.
+
 Navigate between months with the ← and → buttons. The "Today" button snaps you back to the current month. The priority colour legend at the bottom shows you what red, blue, and gray dots mean (high, normal, and low priority).
 
 ---

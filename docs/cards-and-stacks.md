@@ -61,6 +61,7 @@ Right-click on any card header to reveal a menu of actions:
 - **Snooze until...** — pick a date and the card disappears until then.
 - **Kanban view...** — opens this card's tasks in the Kanban board.
 - **Move to stack...** — send the card to a different stack.
+- **Carry Forward** — creates a new card dated today containing only the incomplete tasks from this card. Column assignments (Now/Later), priority, due dates, recurrence rules, and tags are all preserved. Completed tasks are not carried. The new card opens immediately so you can review it. If all tasks are already complete (or the card has none), a brief toast tells you there's nothing to carry.
 - **Delete completed tasks** — a quick sweep to clear out anything you've already checked off.
 - **Archive** — moves the card out of active circulation.
 - **Delete** — removes the card permanently (with an Undo toast for safety).
@@ -72,14 +73,23 @@ A Stack is a color-coded container for cards. Use stacks however they make sense
 
 The sidebar's **STACKS** section lists all your stacks. At the very top is **All Stacks** — a master view that shows cards from every stack simultaneously. It's perfect for a morning review or whenever you want the full picture.
 
-Clicking a stack name focuses the card view on just that stack. If you want to see a specific combination, use the **checkboxes** on each stack row to toggle visibility individually. Unchecked stacks are hidden from the card view but not gone — check them again any time.
+Clicking a stack name focuses the card view on just that stack. The active stack is highlighted with a colored left-border stripe in its stack color. Click **All Stacks** to return to the combined view.
+
+You can also drag any card from the card view and drop it directly onto a stack name in the sidebar to move it there instantly. The target stack highlights as you drag over it.
 
 
 ## Creating and managing Stacks
 
-To create a new stack, hover over the **STACKS** header in the sidebar until the **+** icon appears, then click it. The creation dialog asks for a name and one of 8 color swatches.
+**Adding a stack** — hover over the **STACKS** header until the **+** icon appears and click it, or right-click any stack row and choose **Add Stack**. The dialog asks for a name and lets you pick from 8 color swatches.
 
-To delete a stack, hover over its row in the sidebar and click the **×** button that appears. Cards from a deleted stack don't disappear — they're still accessible through **All Stacks**.
+**Renaming a stack** — right-click its row in the sidebar and choose **Rename**, or hover over the row and click the **⋯** button that appears on the right.
+
+**Deleting a stack** — right-click its row and choose **Delete**. A confirmation dialog gives you two options:
+
+- **Move cards to…** — relocates all cards to another stack of your choosing (the default).
+- **Delete all cards in this stack** — removes the cards along with the stack.
+
+You can never delete the last remaining stack. If only one stack exists the Delete option is disabled.
 
 
 ## A note on color

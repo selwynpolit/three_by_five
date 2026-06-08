@@ -24,9 +24,9 @@ To create your first real stack:
 2. Click it, type a name, and pick one of the 8 color swatches.
 3. Hit Create. Your new stack appears in the list immediately.
 
-Each stack row shows a colored dot (that's your chosen color), the stack name, and a checkbox on the left. The checkbox is a **visibility toggle**: checked means that stack's cards are visible in the main view, unchecked means they're temporarily hidden. It's a handy way to focus — uncheck everything except the stack you're working on right now.
+Each stack row shows a colored dot and the stack name. The active stack gets a solid stripe of its color along the left edge so you always know which one is selected at a glance. Hover over a row and a small **⋯** button appears on the right — click it (or right-click anywhere on the row) to open the stack's context menu.
 
-When you hover over a stack row, a small **×** button appears on the right. That's the delete button. If you delete a stack, don't worry about losing its cards — they stay accessible through **All Stacks**.
+To **focus on a single stack**, just click its name. To return to the combined view, click **All Stacks** at the top. You can also drag any card from the main view and drop it onto a stack name in the sidebar to move it there.
 
 
 ## Creating your first card

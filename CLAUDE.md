@@ -200,6 +200,15 @@ is acceptable.
 - Flip queue handles rapid successive flips without interrupting in-flight cards
 - Never intercept click events on the current card face
 
+**Carry Forward** — right-click a card → "Carry Forward":
+- Creates a new card dated today in the same stack with the card's project title
+- Copies only incomplete tasks, preserving column (Now/Later), title, description,
+  priority, due date, rrule, and tags
+- Kanban stage IDs are NOT copied — carried tasks are plain tasks with no stage
+- If any incomplete task has a kanbanStageId, a confirmation dialog is shown
+- If all tasks are complete or the card has no tasks, a snack bar toast is shown
+- After creation the app navigates to card view showing the new card's stack
+
 **Spacing and sizing:** All proportions defined as named constants — never
 magic numbers buried in widget code.
 
@@ -386,6 +395,17 @@ Recently completed:
   indicator, persistence via Settings DAO. Scale flows via CardZoomData
   InheritedWidget. Canvas view excluded (has own InteractiveViewer).
   Per-display zoom memory deferred — requires native platform channel.
+- Stack management: right-click context menus on stack rows (Add/Rename/Delete);
+  delete confirmation dialog with Move-cards-to or Delete-all choice; last stack
+  deletion prevented; drag card → drop onto sidebar stack to move between stacks;
+  checkboxes replaced with colored left-border selection indicator.
+- Carry Forward: right-click card → creates new card dated today with all
+  incomplete tasks (column, title, description, priority, due date, rrule, tags
+  all preserved; Kanban stage cleared). Toast shown when nothing to carry.
+  Kanban warning dialog shown when source card has stage-assigned tasks.
+  New card surfaces immediately by switching to card view.
+- Calendar task chip tooltips: truncation-detected tooltip on _TaskPill showing
+  full title + priority/due date meta; only shown when text is actually clipped.
 
 In progress:
 - [Update as work proceeds]
