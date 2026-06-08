@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'database_provider.dart';
@@ -10,6 +11,7 @@ final showGenerateButtonProvider =
 class _ShowGenBtn extends Notifier<bool> {
   @override
   bool build() {
+    if (kReleaseMode) return false;
     _restore();
     return true;
   }
