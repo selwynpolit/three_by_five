@@ -83,6 +83,14 @@ class CardsDao {
         ),
       );
 
+  Future<void> undelete(String id) =>
+      (_db.update(_db.cards)..where((c) => c.id.equals(id))).write(
+        CardsCompanion(
+          deletedAt: const Value(null),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+
   Future<void> archive(String id) =>
       (_db.update(_db.cards)..where((c) => c.id.equals(id))).write(
         CardsCompanion(

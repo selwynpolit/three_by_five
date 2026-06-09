@@ -63,6 +63,20 @@ void main() {
       final card = await fixture.cards.getById(id);
       expect(card?.status, 'active');
     });
+
+    test('undelete makes a soft-deleted card visible again', () async {
+      final id = await fixture.cards.create(
+        stackId: stackId,
+        date: DateTime(2024, 6, 1),
+        projectTitle: 'Undo me',
+      );
+      await fixture.cards.delete(id);
+      expect(await fixture.cards.getById(id), isNull);
+      await fixture.cards.undelete(id);
+      final card = await fixture.cards.getById(id);
+      expect(card, isNotNull);
+      expect(card!.projectTitle, 'Undo me');
+    });
   });
 
   group('CardRepository.carryForward', () {

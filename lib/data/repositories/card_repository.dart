@@ -59,6 +59,8 @@ class CardRepository {
 
   Future<void> delete(String id) => _dao.softDelete(id);
 
+  Future<void> undelete(String id) => _dao.undelete(id);
+
   Future<void> archive(String id) => _dao.archive(id);
 
   Future<void> restore(String id) => _dao.restore(id);

@@ -12,6 +12,7 @@ import 'presentation/providers/export_providers.dart';
 import 'presentation/widgets/about_dialog.dart';
 import 'presentation/providers/help_providers.dart';
 import 'presentation/shell/app_shell.dart';
+import 'presentation/widgets/undo_toast.dart';
 
 class ThreeByFiveApp extends ConsumerWidget {
   const ThreeByFiveApp({super.key});
@@ -94,7 +95,7 @@ class ThreeByFiveApp extends ConsumerWidget {
               label: 'Undo',
               shortcut: const SingleActivator(
                   LogicalKeyboardKey.keyZ, meta: true),
-              onSelected: () {},
+              onSelected: () => executeUndo(ref),
             ),
             PlatformMenuItem(
               label: 'Redo',

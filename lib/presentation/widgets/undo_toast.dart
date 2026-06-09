@@ -10,6 +10,34 @@ import '../providers/detail_providers.dart';
 import '../providers/task_providers.dart';
 import '../providers/ui_state_providers.dart';
 
+/// Executes the current pending undo action and clears it.
+/// Safe to call from any context that has a [WidgetRef] — the toast button,
+/// the ⌘Z menu item, and keyboard handlers all share this logic.
+Future<void> executeUndo(WidgetRef ref) async {
+  final action = ref.read(lastUndoActionProvider.notifier).consume();
+  if (action == null) return;
+
+  final tasks = ref.read(taskRepositoryProvider);
+  final cards = ref.read(cardRepositoryProvider);
+
+  switch (action) {
+    case TaskCompleted(:final taskId, :final wasCompleted):
+      await tasks.markComplete(taskId, completed: wasCompleted);
+    case TaskDeleted(:final taskId):
+      await tasks.restore(taskId);
+    case CardHidden(:final cardId):
+      await cards.unhide(cardId);
+    case CardSnoozed(:final cardId):
+      await cards.unhide(cardId);
+    case CardArchived(:final cardId):
+      await cards.restore(cardId);
+    case CardDeleted(:final cardId):
+      await cards.undelete(cardId);
+    case NoteDeleted(:final noteId):
+      await ref.read(noteRepositoryProvider).restore(noteId);
+  }
+}
+
 class UndoToast extends ConsumerStatefulWidget {
   const UndoToast({super.key});
 
@@ -57,39 +85,18 @@ class _UndoToastState extends ConsumerState<UndoToast>
 
   void _dismiss() {
     _ctrl.reverse().then((_) {
-      if (mounted) {
-        ref.read(lastUndoActionProvider.notifier).clear();
-        setState(() => _action = null);
-      }
+      // Don't clear lastUndoActionProvider — ⌘Z must still work after the
+      // toast slides out. The action is only consumed when the user undoes.
+      if (mounted) setState(() => _action = null);
     });
   }
 
   Future<void> _undo() async {
     _dismissTimer?.cancel();
-    final action = ref.read(lastUndoActionProvider.notifier).consume();
     await _ctrl.reverse();
-    if (!mounted || action == null) return;
+    if (!mounted) return;
     setState(() => _action = null);
-
-    final tasks = ref.read(taskRepositoryProvider);
-    final cards = ref.read(cardRepositoryProvider);
-
-    switch (action) {
-      case TaskCompleted(:final taskId, :final wasCompleted):
-        await tasks.markComplete(taskId, completed: wasCompleted);
-      case TaskDeleted(:final taskId):
-        await tasks.restore(taskId);
-      case CardHidden(:final cardId):
-        await cards.unhide(cardId);
-      case CardSnoozed(:final cardId):
-        await cards.unhide(cardId);
-      case CardArchived(:final cardId):
-        await cards.restore(cardId);
-      case CardDeleted(:final cardId):
-        await cards.restore(cardId);
-      case NoteDeleted(:final noteId):
-        await ref.read(noteRepositoryProvider).restore(noteId);
-    }
+    await executeUndo(ref);
   }
 
   static String _label(UndoAction a) => switch (a) {
