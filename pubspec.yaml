@@ -1,7 +1,7 @@
 name: three_by_five
 description: "3by5 — a beautiful index-card task manager"
 publish_to: 'none'
-version: 0.1.0-alpha+1
+version: 0.1.1-alpha+1
 
 environment:
   sdk: ^3.11.5
