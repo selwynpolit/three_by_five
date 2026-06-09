@@ -64,7 +64,8 @@ class CardsDao {
   }
 
   Future<AppCard?> getById(String id) =>
-      (_db.select(_db.cards)..where((c) => c.id.equals(id)))
+      (_db.select(_db.cards)
+            ..where((c) => c.id.equals(id) & c.deletedAt.isNull()))
           .getSingleOrNull();
 
   Future<void> insert(CardsCompanion entry) =>
