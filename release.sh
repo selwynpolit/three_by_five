@@ -41,7 +41,7 @@ git push origin "${VERSION}"
 # Derive repo slug from remote URL
 # Handles both https://github.com/user/repo.git and git@github.com:user/repo.git
 REMOTE="$(git remote get-url origin)"
-REPO="$(echo "$REMOTE" | sed -E 's|.*[:/]([^/]+/[^/]+?)(\.git)?$|\1|')"
+REPO="$(echo "${REMOTE%.git}" | sed -E 's|^.*[:/]([^/]+/[^/]+)$|\1|')"
 
 echo ""
 echo "Done. Tag ${VERSION} pushed — GitHub Actions is building now."
