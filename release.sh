@@ -18,6 +18,16 @@ BARE="${VERSION#v}"   # strip leading 'v' for pubspec.yaml
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# Abort if this tag already exists locally or on the remote
+if git tag | grep -qx "${VERSION}"; then
+  echo "Error: tag ${VERSION} already exists locally — did you mean a new version?" >&2
+  exit 1
+fi
+if git ls-remote --tags origin | grep -q "refs/tags/${VERSION}$"; then
+  echo "Error: tag ${VERSION} already exists on remote." >&2
+  exit 1
+fi
+
 # Abort if there are uncommitted changes
 if ! git diff --quiet || ! git diff --cached --quiet; then
   echo "Error: working tree has uncommitted changes — commit or stash first." >&2
@@ -26,6 +36,13 @@ fi
 
 echo "Bumping pubspec.yaml → ${BARE}..."
 sed -i '' "s/^version: .*/version: ${BARE}+1/" pubspec.yaml
+
+# Only commit if pubspec.yaml actually changed (re-releasing same version is a no-op)
+if git diff --quiet pubspec.yaml; then
+  echo "Error: pubspec.yaml already has version ${BARE}+1 — nothing to commit." >&2
+  echo "       Did you mean a new version number?" >&2
+  exit 1
+fi
 
 echo "Committing version bump..."
 git add pubspec.yaml
