@@ -1,98 +1,190 @@
 # 3by5
 
-A macOS desktop task manager inspired by physical 3x5 index cards. Cards live in stacks (projects), each card holds a Now column and a Later column, and a detail panel gives each task full rich-text notes, attachments, tags, and priority. The UI aims for the tactile feel of a physical corkboard.
+A beautiful, native macOS task manager inspired by physical 3×5 index cards.
+Cards live in stacks, each card holds a **Now** column and a **Later** column,
+and a detail panel gives every task rich-text notes, attachments, tags, and
+priority. The UI aims for the tactile warmth of a physical corkboard.
 
 ---
 
 ## Tech Stack
 
-| Layer | Package / Version |
+| Layer | Package |
 |---|---|
-| Framework | Flutter 3.41.8, Dart 3.11.5 |
-| Database | Drift 2.28.2 (SQLite ORM, FTS5) |
-| State | Riverpod 2.6.1 |
-| Rich text | flutter_quill 11.5.0 |
-| Window | window_manager |
+| Framework | Flutter 3.44 / Dart 3.12 |
+| Database | Drift 2.22 (SQLite ORM, FTS5) |
+| State | Riverpod 2.6 |
+| Rich text | flutter_quill 11.5 |
+| Window | window_manager 0.4 |
 | Drag-drop / files | desktop_drop, file_picker |
+| Date parsing | jiffy |
+| Markdown | flutter_markdown (help system) |
 
 ---
 
-## Running the App
+## Running Locally
 
 Requires Flutter with macOS desktop support enabled.
 
-```
-flutter run -d macos
+```bash
+flutter run -d macos          # development (debug build)
+./release_alpha.sh            # build release → /Applications/3by5 Alpha.app
+flutter test                  # run the test suite
 ```
 
 ---
 
-## What's Been Built (Sessions 1–5)
+## Feature Summary
 
 ### Card View
-- Index cards displayed in three layout modes:
-  - **Grid** — sorted by date
-  - **Scattered** — rotated, corkboard-style
-  - **Free Canvas** — drag cards to any position
-- Each card shows a **Now** column and a **Later** column
-- Double-click a card title to rename the project
-- Card header right-click menu: Hide, Snooze (2 h / tonight / tomorrow / 1 week / custom date), Archive, Delete, Unhide, Restore
-- Status badges on hidden, snoozed, and archived cards
-- Eye toggle to show/hide hidden cards
-- Snoozed cards resurface automatically (1-minute polling timer)
+- Draw stack (right) and discard pile (left) — page-turn flip navigation
+- Each card: **Now** column (left) + **Later** column (right)
+- Double-click card title to rename the project
+- Right-click card header: Hide, Snooze, Archive, Delete, Carry Forward
+- Zoom: pinch, ⌘+/⌘-/⌘0, ⌘+scroll — spring animation, floating pill indicator
+- Snoozed cards resurface automatically
 
 ### Stacks (Projects)
-- Create and delete stacks from the sidebar
-- Each stack has its own set of cards
+- Right-click sidebar: Add / Rename / Delete stack
+- Delete confirmation: move cards elsewhere or delete all
+- Last stack deletion prevented
+- Drag a card and drop onto a sidebar row to move it between stacks
 
-### Tasks
-- Add tasks inline within a card (Enter for next task, Esc to close)
-- Drag to reorder tasks within and between Now/Later columns
-- Task right-click menu: Open, Duplicate, Move to Now/Later, Delete
-- Undo toast for task complete and task delete
+### Carry Forward
+- Right-click any card → **Carry Forward**
+- Creates a new card dated today in the same stack
+- Copies only incomplete tasks, preserving column, title, description, priority,
+  due date, rrule, and tags; Kanban stage IDs are cleared
+- Shows a warning dialog if any incomplete tasks carry a Kanban stage
+- Navigates to the new card immediately
 
 ### Task Detail Panel
-- Slides in from the right
-- Title editing, priority selector, due date picker, tag editor
+- Title, priority selector, due date, tags
 - Rich text description (Quill WYSIWYG)
-- Attachments: inline images (drag-drop or file picker), links, email clips
-- Rich text notes with inline image support; editable and deletable inline
+- Inline image attachments (drag-drop or file picker), link previews, email clips
+- Timestamped editable notes feed with soft delete
+
+### Kanban View
+- Cards as swimlane columns, tasks as cards within lanes
+- Customisable stages: To Do / In Progress / Pending / Done
+
+### Calendar View
+- Monthly layout; tasks appear on their due date as chips
+- Truncation-aware tooltips on task chips showing full title + meta
+
+### Today Dashboard
+- Tasks due today grouped by card/project
 
 ### Archive View
-- Lists all archived cards
-- Restore or permanently delete from this view
+- Browse and restore archived cards
 
-### Undo
-- Toast-based undo for: task complete, task delete, card hide, card snooze, card archive, card delete
+### Full-text Search (⌘K)
+- FTS5-powered search across task titles and descriptions
 
-### Data Model
-- **Stacks → Cards → Tasks** (Now/Later columns)
-- Tasks have: title, priority, due date, tags, description, notes, attachments
-- All data stored in SQLite via Drift; FTS5 tables for future search
+### Backup & Restore
+- `.3by5backup` files (zip: database + images + manifest)
+- Pre-restore safety backup is mandatory — always created before any restore
+- Automatic backup on startup
 
-### Utilities
-- Generate button (⊛) creates 3 sample cards with 5 tasks each
-- Keyboard shortcuts: `⌘N` new card, `⌘↵` save note, `Esc` close panels
+### CSV Export (⌘⇧E)
+- Flattened task-list CSV + summary CSV + attachments subfolder, delivered as zip
+
+### Help System (⌘?)
+- Slide-in overlay rendering `docs/` markdown files via flutter_markdown
+- Searchable, remembers last section
 
 ---
 
-## Roadmap
+## Keyboard Shortcuts
 
-| Session | Feature |
+| Shortcut | Action |
 |---|---|
-| Session 6 | Kanban view |
-| Session 7 | Calendar view |
-| Session 8 | Today dashboard, full-text search, complete keyboard shortcuts |
-| Session 9 | Voice input, recurring tasks, onboarding, final polish |
+| ⌘N | New card |
+| ⌘K | Search |
+| ⌘Z | Undo |
+| ⌘? | Help |
+| ⌘⇧E | Export CSV |
+| ⌘⇧B | Backup |
+| ⌘1 | Card View |
+| ⌘2 | Kanban View |
+| ⌘3 | Calendar View |
+| ⌘4 | Today Dashboard |
+| ⌘5 | Archive View |
+| ⌘6 | All Cards View |
+| ⌘+ / ⌘= | Zoom in |
+| ⌘- | Zoom out |
+| ⌘0 | Reset zoom |
+| → / ← | Flip card |
+| Esc | Close modal / panel |
 
 ---
 
-## Session History
+## Release Tooling
 
-| Session | Date | Scope |
-|---|---|---|
-| 1 | — | Project scaffold, Drift schema, SQLite setup |
-| 2 | — | Riverpod providers, domain layer |
-| 3 | — | Stack switcher, Card View UI |
-| 4 | — | Task Detail panel |
-| 5 | 2026-04-29 | Card hiding, snooze, archive, undo |
+**Local alpha build:**
+```bash
+./release_alpha.sh
+```
+Builds `flutter build macos --release`, renames to *3by5 Alpha*, and copies to
+`/Applications`. The alpha uses a separate macOS sandbox container
+(`com.example.threeByFive`) from the dev build (`com.example.threeByFive.debug`),
+so they maintain independent databases.
+
+The alpha is visually marked with:
+- An **orange "A" badge** on the app icon (`AppIcon-Alpha` asset set)
+- A faded **"ALPHA RELEASE" watermark** across the app surface
+
+**Tagged GitHub release:**
+```bash
+./release.sh v1.0.0-alpha
+```
+Bumps `pubspec.yaml`, commits, tags, and pushes. GitHub Actions builds macOS
+(DMG), Windows (ZIP), and Linux (tar.gz) and attaches them to a GitHub Release.
+
+---
+
+## Tests
+
+```bash
+flutter test
+```
+
+| File | Coverage |
+|---|---|
+| `test/unit/date_parsing_service_test.dart` | 20 cases |
+| `test/unit/undo_manager_test.dart` | UndoManager + all 7 action subtypes |
+| `test/unit/enum_test.dart` | Priority / Column / CardStatus round-trips |
+| `test/db/settings_dao_test.dart` | 6 tests |
+| `test/db/card_repository_test.dart` | 10 tests (CRUD + carryForward contract) |
+| `test/db/task_repository_test.dart` | 9 tests |
+| `test/db/note_repository_test.dart` | 6 tests |
+
+All DB tests run against `NativeDatabase.memory()`.
+
+---
+
+## Project Structure
+
+```
+lib/
+├── data/           # Drift DB, tables, DAOs, repositories
+├── domain/         # Business logic, services, undo
+├── presentation/   # Views, widgets, Riverpod providers, shell
+└── core/           # Constants, theme, extensions, routing
+
+macos/              # macOS platform code + Xcode project
+docs/               # User documentation (markdown, bundled as assets)
+test/               # Unit and DB tests
+scripts/            # Dev utilities (generate_alpha_icons.swift, …)
+```
+
+---
+
+## Known Limitations
+
+- Voice input is a stub (`isAvailable = false`) — full implementation planned
+- UTI file association (opening `.3by5backup` files from Finder) not yet wired
+- Board View directory scaffolded, no implementation
+- Onboarding flow not yet built
+- ⌘F not bound (⌘K handles search); Tab/Space shortcuts not implemented
+- Per-display zoom memory not implemented (needs native channel for stable display ID)

@@ -375,9 +375,66 @@ Alexa skill, Windows and Linux apps.
 
 ---
 
+## Release Tooling
+
+**`release_alpha.sh`** — builds a local release and installs to
+`/Applications/3by5 Alpha.app`. Run this to test the release build locally.
+
+**`release.sh`** — validates version tag format, bumps `pubspec.yaml` version,
+commits, tags, and pushes. Triggers the GitHub Actions release workflow.
+
+**`.github/workflows/release.yml`** — builds macOS (DMG), Windows (ZIP), and
+Linux (tar.gz) on `push: tags: 'v*.*.*'`. Attaches all three artifacts to a
+GitHub Release. Pre-release if tag contains `alpha` or `beta`. Tests run on
+macOS only (Linux/Windows lack macOS plugin stubs). Injects `BUILD_VERSION`
+and `BUILD_DATE` as compile-time constants via `--dart-define`.
+
+**Bundle identifier isolation** — debug and release builds use separate macOS
+sandbox containers and thus separate databases:
+- Debug (`flutter run`): `com.example.threeByFive.debug`
+  → `~/Library/Containers/com.example.threeByFive.debug/`
+- Release (`./release_alpha.sh`): `com.example.threeByFive`
+  → `~/Library/Containers/com.example.threeByFive/`
+
+**Alpha app icon** — Release builds use `AppIcon-Alpha` (orange "A" badge,
+top-right corner) so the alpha is visually distinct from any future production
+build. Regenerate with `swift scripts/generate_alpha_icons.swift` from the
+project root if the base icon changes.
+
+**Alpha watermark** — `_AlphaWatermark` overlays "ALPHA RELEASE" in faded
+white text across the entire app surface in release builds (`kReleaseMode`).
+
+**Generate button** — the dev-only card generator (⊛) is hidden in release
+builds via `kReleaseMode` in `card_view_settings_provider.dart`.
+
+---
+
+## Test Suite
+
+Tests live in `test/`. Run with `flutter test`.
+
+```
+test/
+├── helpers/test_database.dart   # TestFixture — in-memory DB + all repos
+├── unit/
+│   ├── date_parsing_service_test.dart  # 20 cases
+│   ├── undo_manager_test.dart          # UndoManager lifecycle + all subtypes
+│   └── enum_test.dart                 # TaskPriority/TaskColumn/CardStatus round-trips
+└── db/
+    ├── settings_dao_test.dart          # 6 tests
+    ├── card_repository_test.dart       # 10 tests (CRUD + carryForward contract)
+    ├── task_repository_test.dart       # 9 tests
+    └── note_repository_test.dart       # 6 tests
+```
+
+All DB tests use `NativeDatabase.memory()` via `AppDatabase.forTesting(e)`.
+Tests run on macOS only — CI skips Linux/Windows to avoid plugin stub failures.
+
+---
+
 ## Current Status
 
-Last updated: May 2026
+Last updated: June 2026
 
 Recently completed:
 - Card flip animation (two-zone, page-turn, Matrix4.rotationY)
@@ -403,9 +460,16 @@ Recently completed:
   incomplete tasks (column, title, description, priority, due date, rrule, tags
   all preserved; Kanban stage cleared). Toast shown when nothing to carry.
   Kanban warning dialog shown when source card has stage-assigned tasks.
-  New card surfaces immediately by switching to card view.
+  New card surfaces immediately by switching to card view. Business logic lives
+  in `CardRepository.carryForward()` — widget is UI-only.
 - Calendar task chip tooltips: truncation-detected tooltip on _TaskPill showing
   full title + priority/due date meta; only shown when text is actually clipped.
+- Release tooling: release_alpha.sh, release.sh, GitHub Actions workflow
+- Alpha visual markers: watermark overlay + AppIcon-Alpha (orange A badge)
+- Generate button hidden in release builds (kReleaseMode)
+- Test suite: 51+ tests across unit and DB layers
+- Bundle ID isolation: debug and release builds use separate databases
+- Production bug fix: CardsDao.getById was missing soft-delete filter
 
 In progress:
 - [Update as work proceeds]
