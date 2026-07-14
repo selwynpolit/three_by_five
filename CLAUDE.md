@@ -476,8 +476,9 @@ Recently completed:
 - In-app help system with docs/ markdown rendering
 - completed_at field added to Task schema (migration v4)
 - Notes: soft delete, editability, updated_at timestamp (migration v5)
-- settingsDaoProvider added for widget access to settings (NOTE: one direct
-  SettingsDao instantiation remains in settings_panel.dart — see Known issues)
+- settingsDaoProvider added for provider-layer settings access; all widget and
+  provider SettingsDao usage now routes through it (auto-backup writes go via
+  AutoBackupSettingsController — HANDOFF.md #1 done)
 - BoardColumnsRepository added — direct DAO access removed from kanban view
 - ⌘6 (All Cards View) keyboard shortcut bound
 - Card zoom: pinch, ⌘+/⌘-/⌘0, ⌘+scroll, spring animation, floating pill
@@ -527,16 +528,11 @@ Known issues:
 - ⌘F not bound (⌘K handles search)
 - Tab/⇧Tab and Space shortcuts not implemented
 - Per-display zoom memory not implemented (needs native platform channel for stable display ID)
-- ARCHITECTURE VIOLATION: settings_panel.dart (_AutoBackupSection.build)
-  instantiates SettingsDao directly in a widget and calls dao.set() from UI —
-  must go through settingsDaoProvider / a provider-layer mutation (HANDOFF.md #1)
 - Edit menu items Redo (⌘⇧Z), Cut, Copy, Paste, Select All in lib/app.dart have
   empty onSelected handlers; Redo is not supported by UndoManager. May swallow
   native text-field shortcuts (HANDOFF.md #2)
 - Calendar View: no weekly mode, no drag-to-reschedule (HANDOFF.md #3)
 - Magic numbers: settings_panel.dart uses no AppSpacing constants;
   index_card_widget.dart repeats raw popup-menu dimensions (HANDOFF.md #4)
-- backup_providers.dart constructs SettingsDao directly 5× instead of reusing
-  settingsDaoProvider (minor inconsistency)
 - lib/presentation/views/search/ is an empty scaffold directory (search lives
   in presentation/widgets/search_overlay.dart)

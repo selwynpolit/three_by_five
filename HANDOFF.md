@@ -16,7 +16,16 @@ Rules that apply to every task (from CLAUDE.md, repeated here for emphasis):
 
 ---
 
-## Task 1 — Fix SettingsDao-in-widget architecture violation  🔴 HIGH
+## Task 1 — Fix SettingsDao-in-widget architecture violation  ✅ DONE (2026-07-14)
+
+Resolved on branch `audit/claude-md-and-settings-dao-fix`: added
+`AutoBackupSettingsController` + `autoBackupSettingsControllerProvider` in
+backup_providers.dart; settings_panel.dart now writes via the controller and no
+longer constructs a DAO; the 5 direct `SettingsDao(...)` constructions in
+backup_providers.dart now use `settingsDaoProvider`. 77 tests passing. Original
+task spec preserved below for reference.
+
+
 
 **Problem:** `lib/presentation/widgets/settings_panel.dart`, in
 `_AutoBackupSection.build` (around line 320):
