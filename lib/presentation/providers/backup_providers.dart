@@ -8,6 +8,13 @@ import '../../core/services/backup_service.dart';
 import '../../data/daos/settings_dao.dart';
 import 'database_provider.dart';
 
+// ── Settings keys ─────────────────────────────────────────────────────────────
+
+const _kAutoFrequency = 'backupAutoFrequency';
+const _kAutoFolder = 'backupAutoFolder';
+const _kLastManualDate = 'backupLastManualDate';
+const _kLastManualSize = 'backupLastManualSize';
+
 // ── Visibility flags ──────────────────────────────────────────────────────────
 
 final backupPanelVisibleProvider  = StateProvider<bool>((ref) => false);
@@ -17,34 +24,55 @@ final restorePanelVisibleProvider = StateProvider<bool>((ref) => false);
 
 final backupServiceProvider = Provider<BackupService>((ref) => BackupService(
       db: ref.watch(appDatabaseProvider),
-      settings: SettingsDao(ref.watch(appDatabaseProvider)),
+      settings: ref.watch(settingsDaoProvider),
     ));
 
 // ── Settings watchers ─────────────────────────────────────────────────────────
 
 final autoBackupFrequencyProvider = StreamProvider<String>((ref) {
-  final dao = SettingsDao(ref.watch(appDatabaseProvider));
-  return dao.watch('backupAutoFrequency').map((v) => v ?? 'off');
+  return ref
+      .watch(settingsDaoProvider)
+      .watch(_kAutoFrequency)
+      .map((v) => v ?? 'off');
 });
 
 final autoBackupFolderProvider = StreamProvider<String?>((ref) {
-  final dao = SettingsDao(ref.watch(appDatabaseProvider));
-  return dao.watch('backupAutoFolder');
+  return ref.watch(settingsDaoProvider).watch(_kAutoFolder);
 });
 
 final lastManualBackupDateProvider = StreamProvider<DateTime?>((ref) {
-  final dao = SettingsDao(ref.watch(appDatabaseProvider));
-  return dao
-      .watch('backupLastManualDate')
+  return ref
+      .watch(settingsDaoProvider)
+      .watch(_kLastManualDate)
       .map((v) => v != null ? DateTime.tryParse(v) : null);
 });
 
 final lastManualBackupSizeProvider = StreamProvider<int?>((ref) {
-  final dao = SettingsDao(ref.watch(appDatabaseProvider));
-  return dao
-      .watch('backupLastManualSize')
+  return ref
+      .watch(settingsDaoProvider)
+      .watch(_kLastManualSize)
       .map((v) => v != null ? int.tryParse(v) : null);
 });
+
+// ── Auto-backup settings controller ──────────────────────────────────────────
+// Provider-layer write path for auto-backup settings. UI widgets mutate these
+// settings through this controller and never touch SettingsDao directly. The
+// StreamProviders above pick up the change reactively (Drift watch()).
+
+class AutoBackupSettingsController {
+  AutoBackupSettingsController(this._settings);
+  final SettingsDao _settings;
+
+  Future<void> setFrequency(String value) =>
+      _settings.set(_kAutoFrequency, value);
+
+  Future<void> setFolder(String path) => _settings.set(_kAutoFolder, path);
+}
+
+final autoBackupSettingsControllerProvider =
+    Provider<AutoBackupSettingsController>(
+  (ref) => AutoBackupSettingsController(ref.watch(settingsDaoProvider)),
+);
 
 final safetyBackupsProvider = FutureProvider<List<SafetyBackupRecord>>((ref) {
   return ref.read(backupServiceProvider).listSafetyBackups();

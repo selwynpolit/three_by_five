@@ -41,7 +41,8 @@ lib/
 │   ├── enums/      # AppView, TaskColumn, Priority, CardStatus etc
 │   ├── services/   # Domain service implementations
 │   │               # (VoiceService, CalendarService, RecurrenceService,
-│   │               #  DateParsingService, UrlFetchService, WindowStateService)
+│   │               #  DateParsingService, UrlFetchService, WindowStateService,
+│   │               #  EmailClipService)
 │   └── undo/       # UndoManager and UndoAction sealed hierarchy
 ├── presentation/   # UI — views, widgets, providers
 │   ├── views/      # Top-level screens (card_view, kanban_view etc)
@@ -114,6 +115,7 @@ Hard-deleted by design (see Architecture Rules). No soft delete.
 Fields: id (text PK), title, sort_order, color (nullable ARGB int)
 
 **CalendarEvent** — read-only cache of Google Calendar events (Phase 2).
+**Table does not exist in the schema yet** — this is the planned shape only.
 Fields: uuid, external_id, title, start_datetime, end_datetime,
 calendar_name, color, url, synced_at
 
@@ -218,6 +220,9 @@ magic numbers buried in widget code.
 
 **Card View** — default view. Draw stack right, discard pile left. Page-turn
 flip navigation. Current card shows two columns: Now (left) and Later (right).
+Has four layout modes via `CardLayoutMode` (grid / scattered / canvas /
+task-list grid with sortable columns — see `canvas_providers.dart`). Canvas
+mode is excluded from the zoom system (it has its own InteractiveViewer).
 
 **Kanban View** — cards as swimlane columns, tasks as cards within lanes.
 
@@ -227,8 +232,10 @@ customisable columns. Directory structure exists; implementation pending.
 **Task Detail View** — title, priority, due date, tags, rich text description,
 timestamped editable notes feed, attachments.
 
-**Calendar View** — monthly/weekly. Tasks appear on due dates as chips.
-Drag to reschedule. Google Calendar overlay in Phase 2.
+**Calendar View** — monthly grid. Tasks appear on due dates as pills (max 3
+shown per day) with truncation-detected tooltips. Weekly mode and
+drag-to-reschedule are **not yet implemented** (Coming Soon). Google Calendar
+overlay in Phase 2.
 
 **Today Dashboard** — tasks due today grouped by card/project. Calendar
 events in Phase 2.
@@ -237,6 +244,11 @@ events in Phase 2.
 
 **Help Panel** — slide-in overlay, ⌘? to open. Renders docs/ markdown files
 via flutter_markdown. Searchable. Remembers last section.
+
+**Settings Panel** (`lib/presentation/widgets/settings_panel.dart`) — backup
+settings UI: automatic backup frequency and destination folder. Built ahead of
+the full Phase 2 Settings screen (which will absorb it). Note: currently
+contains a known architecture violation — see Known issues.
 
 ---
 
@@ -269,6 +281,13 @@ These are defined and must be maintained:
 | Escape | Close modal or detail panel |
 | → | Flip to next card (Card View) |
 | ← | Flip to previous card (Card View) |
+| ⌘H | Hide app (macOS menu) |
+| ⌘Q | Quit app (macOS menu) |
+
+Note: the Edit menu (`lib/app.dart`) also declares ⌘⇧Z Redo, ⌘X, ⌘C, ⌘V, and
+⌘A menu items whose handlers are **empty no-ops** (`onSelected: () {}`). Redo
+has no UndoManager support. These may swallow native text-field shortcuts —
+see Known issues.
 
 ---
 
@@ -295,11 +314,19 @@ files. Method channel between Swift AppDelegate and Flutter. **Not yet
 implemented** — AppDelegate.swift has no file-open code, and the Flutter
 method channel does not exist. Planned for a future session.
 
+**EmailClipService** (`lib/domain/services/email_clip_service.dart`) — detects
+and parses pasted raw email text (From/Subject/Date headers) into structured
+EmailClip fields for email_clip attachments. Pure Dart, regex-based.
+
 ---
 
 ## File Type Registration
 
-`.3by5backup` is a registered custom document type:
+**Not yet implemented.** `.3by5backup` UTI registration is planned alongside
+FileOpenService. Verified absent as of July 2026: `macos/Runner/Info.plist`
+has no CFBundleDocumentTypes or UTExportedTypeDeclarations, there is no
+document icon (.icns) in `macos/Runner/`, and no lsregister build phase exists
+in the Xcode project. The planned shape when implemented:
 - UTI: `com.threebyfive.backup`
 - Conforms to: `public.zip-archive`
 - Registered in: `macos/Runner/Info.plist`
@@ -323,15 +350,18 @@ new functionality. Mark unimplemented planned features as "Coming Soon."
 ## Phases
 
 **Phase 1 — Current (Mac only):**
-Card View, Kanban View, Board View, Task Detail, Calendar View (tasks only),
+Card View, Kanban View, Board View (not started), Task Detail, Calendar View
+(tasks only; monthly grid built, weekly + drag-reschedule pending),
 Today Dashboard (tasks only), Archive View, Stack management, Card hiding and
 snooze, Tags, Priority, Due dates, Recurring tasks, FTS5 search, Keyboard
-shortcuts, Undo, Voice input, Backup and restore, CSV export, Help system,
-Window state persistence, Onboarding, UTI file association.
+shortcuts, Undo, Voice input (stub), Backup and restore, CSV export, Help
+system, Window state persistence, Onboarding (not started), UTI file
+association (not started).
 
 **Phase 2 — Planned:**
 Google Calendar integration, Dark and sepia themes fully styled, Notifications
-and reminders, Settings screen, Due date filtering UI, Custom URL scheme
+and reminders, Settings screen (a backup-focused settings panel already exists
+— see Views; the full screen will absorb it), Due date filtering UI, Custom URL scheme
 (3by5://add), Gmail API, macOS Mail Share Extension, Outlook add-in, Cloud sync
 (Supabase or Firebase), iOS and Android apps, Voice dictation into notes.
 
@@ -434,7 +464,8 @@ Tests run on macOS only — CI skips Linux/Windows to avoid plugin stub failures
 
 ## Current Status
 
-Last updated: June 2026
+Last updated: July 2026 (full CLAUDE.md ↔ codebase audit performed 2026-07-14;
+see HANDOFF.md for the resulting work queue)
 
 Recently completed:
 - Card flip animation (two-zone, page-turn, Matrix4.rotationY)
@@ -445,7 +476,9 @@ Recently completed:
 - In-app help system with docs/ markdown rendering
 - completed_at field added to Task schema (migration v4)
 - Notes: soft delete, editability, updated_at timestamp (migration v5)
-- SettingsDao architecture violation resolved — settingsDaoProvider added
+- settingsDaoProvider added for provider-layer settings access; all widget and
+  provider SettingsDao usage now routes through it (auto-backup writes go via
+  AutoBackupSettingsController — HANDOFF.md #1 done)
 - BoardColumnsRepository added — direct DAO access removed from kanban view
 - ⌘6 (All Cards View) keyboard shortcut bound
 - Card zoom: pinch, ⌘+/⌘-/⌘0, ⌘+scroll, spring animation, floating pill
@@ -470,6 +503,10 @@ Recently completed:
 - Test suite: 51+ tests across unit and DB layers
 - Bundle ID isolation: debug and release builds use separate databases
 - Production bug fix: CardsDao.getById was missing soft-delete filter
+- Card layout modes: grid / scattered / canvas / task-list grid with sortable
+  columns (CardLayoutMode, TaskSortConfig, canvas_providers.dart)
+- Settings panel with automatic-backup frequency and folder configuration
+- EmailClipService: parses pasted raw email text into email_clip attachment fields
 
 In progress:
 - [Update as work proceeds]
@@ -483,9 +520,19 @@ Next up:
 
 Known issues:
 - Voice input is a stub (isAvailable = false, no speech recognition)
-- FileOpenService / UTI file association not implemented
+- FileOpenService / UTI file association not implemented (File Type
+  Registration section describes the planned shape only — nothing is in
+  Info.plist yet)
 - Board View has directory structure but no implementation
 - Onboarding not implemented
 - ⌘F not bound (⌘K handles search)
 - Tab/⇧Tab and Space shortcuts not implemented
 - Per-display zoom memory not implemented (needs native platform channel for stable display ID)
+- Edit menu items Redo (⌘⇧Z), Cut, Copy, Paste, Select All in lib/app.dart have
+  empty onSelected handlers; Redo is not supported by UndoManager. May swallow
+  native text-field shortcuts (HANDOFF.md #2)
+- Calendar View: no weekly mode, no drag-to-reschedule (HANDOFF.md #3)
+- Magic numbers: settings_panel.dart uses no AppSpacing constants;
+  index_card_widget.dart repeats raw popup-menu dimensions (HANDOFF.md #4)
+- lib/presentation/views/search/ is an empty scaffold directory (search lives
+  in presentation/widgets/search_overlay.dart)
