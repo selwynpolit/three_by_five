@@ -59,10 +59,23 @@ void main() {
       expect(const CardHidden(cardId: 'y').cardId, 'y');
     });
 
+    test('TaskRescheduled preserves the previous due date', () {
+      final prev = DateTime(2024, 6, 10, 9, 0);
+      final a = TaskRescheduled(taskId: 't1', previousDueDate: prev);
+      expect(a.taskId, 't1');
+      expect(a.previousDueDate, prev);
+    });
+
+    test('TaskRescheduled allows a null previous due date', () {
+      const a = TaskRescheduled(taskId: 't1', previousDueDate: null);
+      expect(a.previousDueDate, isNull);
+    });
+
     test('pattern match covers all subtypes', () {
       final actions = <UndoAction>[
         const TaskCompleted(taskId: 't', wasCompleted: true),
         const TaskDeleted(taskId: 't'),
+        TaskRescheduled(taskId: 't', previousDueDate: DateTime(2024, 6, 1)),
         const NoteDeleted(noteId: 'n'),
         const CardArchived(cardId: 'c', previousStatus: 'active'),
         const CardDeleted(cardId: 'c'),
@@ -74,6 +87,7 @@ void main() {
         final label = switch (action) {
           TaskCompleted() => 'task-completed',
           TaskDeleted() => 'task-deleted',
+          TaskRescheduled() => 'task-rescheduled',
           NoteDeleted() => 'note-deleted',
           CardArchived() => 'card-archived',
           CardDeleted() => 'card-deleted',

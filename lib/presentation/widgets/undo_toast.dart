@@ -25,6 +25,8 @@ Future<void> executeUndo(WidgetRef ref) async {
       await tasks.markComplete(taskId, completed: wasCompleted);
     case TaskDeleted(:final taskId):
       await tasks.restore(taskId);
+    case TaskRescheduled(:final taskId, :final previousDueDate):
+      await tasks.updateDueDate(taskId, previousDueDate);
     case CardHidden(:final cardId):
       await cards.unhide(cardId);
     case CardSnoozed(:final cardId):
@@ -103,6 +105,7 @@ class _UndoToastState extends ConsumerState<UndoToast>
         TaskCompleted(:final wasCompleted) =>
           wasCompleted ? 'Marked incomplete' : 'Task completed',
         TaskDeleted() => 'Task deleted',
+        TaskRescheduled() => 'Task rescheduled',
         CardHidden() => 'Card hidden',
         CardSnoozed() => 'Card snoozed',
         CardArchived() => 'Card archived',

@@ -19,6 +19,15 @@ final class TaskDeleted extends UndoAction {
   final String taskId;
 }
 
+final class TaskRescheduled extends UndoAction {
+  const TaskRescheduled({required this.taskId, required this.previousDueDate});
+  final String taskId;
+
+  /// The due date to restore (what it was BEFORE the drag). Nullable so an
+  /// undo can also clear a date that was previously unset.
+  final DateTime? previousDueDate;
+}
+
 // ── Note actions ──────────────────────────────────────────────────────────────
 
 final class NoteDeleted extends UndoAction {

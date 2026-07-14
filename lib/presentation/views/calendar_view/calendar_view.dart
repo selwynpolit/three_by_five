@@ -5,10 +5,17 @@ import 'package:intl/intl.dart' as intl;
 import '../../../core/theme/app_colors.dart';
 import '../../../data/database/app_database.dart';
 import '../../../domain/enums/app_view.dart';
+import '../../../domain/undo/undo_action.dart';
 import '../../providers/card_providers.dart';
 import '../../providers/task_providers.dart';
 import '../../providers/ui_state_providers.dart';
 import '../../widgets/zoomed_view_area.dart';
+
+// Drag-to-reschedule visuals.
+const double _kDragFeedbackWidth = 160;
+const double _kDragOverBorderWidth = 2.0;
+const Duration _kPulseDuration = Duration(milliseconds: 420);
+const double _kPulsePeakOpacity = 0.5;
 
 // ── Calendar view ─────────────────────────────────────────────────────────────
 
@@ -22,6 +29,12 @@ class CalendarView extends ConsumerStatefulWidget {
 class _CalendarViewState extends ConsumerState<CalendarView> {
   late DateTime _month;
   late DateTime _selected;
+
+  /// Destination day of the most recent drop, and a sequence counter that
+  /// increments on every drop so the target cell re-pulses each time (even
+  /// when consecutive drops land on the same day).
+  DateTime? _pulseDate;
+  int _pulseSeq = 0;
 
   static final _monthFmt = intl.DateFormat('MMMM yyyy');
   static final _panelFmt = intl.DateFormat('EEE, d MMMM');
@@ -195,6 +208,14 @@ class _CalendarViewState extends ConsumerState<CalendarView> {
                           ? () => setState(
                               () => _selected = cells[w * 7 + d]!)
                           : null,
+                      onTaskDropped: cells[w * 7 + d] != null
+                          ? (taskId) =>
+                              _reschedule(taskId, cells[w * 7 + d]!)
+                          : null,
+                      pulse: cells[w * 7 + d] != null &&
+                              cells[w * 7 + d] == _pulseDate
+                          ? _pulseSeq
+                          : 0,
                     ),
                   ),
               ],
@@ -202,6 +223,29 @@ class _CalendarViewState extends ConsumerState<CalendarView> {
           ),
       ],
     );
+  }
+
+  /// Moves [taskId]'s due date to [day], preserving the original time of day.
+  /// No-op when the task already falls on that day. Records an undo action and
+  /// pulses the destination cell. The calendar's StreamProvider re-emits, so
+  /// the grid updates itself — no explicit invalidation needed.
+  Future<void> _reschedule(String taskId, DateTime day) async {
+    final repo = ref.read(taskRepositoryProvider);
+    final task = await repo.getById(taskId);
+    if (task == null || task.dueDate == null) return;
+    final old = task.dueDate!;
+    if (_dateOnly(old) == day) return; // already on this day
+    final newDue =
+        DateTime(day.year, day.month, day.day, old.hour, old.minute, old.second);
+    await repo.updateDueDate(taskId, newDue);
+    ref
+        .read(lastUndoActionProvider.notifier)
+        .record(TaskRescheduled(taskId: taskId, previousDueDate: old));
+    if (!mounted) return;
+    setState(() {
+      _pulseDate = day;
+      _pulseSeq++;
+    });
   }
 
   void _prevMonth() =>
@@ -229,6 +273,8 @@ class _DayCell extends StatefulWidget {
     required this.isSelected,
     required this.isWeekend,
     required this.onTap,
+    required this.onTaskDropped,
+    required this.pulse,
   });
 
   final DateTime? date;
@@ -238,12 +284,44 @@ class _DayCell extends StatefulWidget {
   final bool isWeekend;
   final VoidCallback? onTap;
 
+  /// Called with the dropped task's id when a pill is released on this cell.
+  final void Function(String taskId)? onTaskDropped;
+
+  /// Non-zero when this cell is the destination of a just-completed drop; the
+  /// value changes on every drop so a fresh pulse fires each time.
+  final int pulse;
+
   @override
   State<_DayCell> createState() => _DayCellState();
 }
 
-class _DayCellState extends State<_DayCell> {
+class _DayCellState extends State<_DayCell>
+    with SingleTickerProviderStateMixin {
   bool _hovered = false;
+  bool _dragOver = false;
+  late final AnimationController _pulseCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseCtrl = AnimationController(vsync: this, duration: _kPulseDuration);
+  }
+
+  @override
+  void didUpdateWidget(covariant _DayCell old) {
+    super.didUpdateWidget(old);
+    if (widget.pulse != 0 && widget.pulse != old.pulse) {
+      _pulseCtrl.forward(from: 0).then((_) {
+        if (mounted) _pulseCtrl.reverse();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulseCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -259,8 +337,23 @@ class _DayCellState extends State<_DayCell> {
       );
     }
 
+    return DragTarget<String>(
+      onWillAcceptWithDetails: (_) {
+        setState(() => _dragOver = true);
+        return true;
+      },
+      onLeave: (_) => setState(() => _dragOver = false),
+      onAcceptWithDetails: (d) {
+        setState(() => _dragOver = false);
+        widget.onTaskDropped?.call(d.data);
+      },
+      builder: (context, candidate, rejected) => _buildCell(),
+    );
+  }
+
+  Widget _buildCell() {
     final Color bg;
-    if (widget.isSelected) {
+    if (_dragOver || widget.isSelected) {
       bg = AppColors.accentLight;
     } else if (_hovered) {
       bg = AppColors.sidebarHover;
@@ -270,6 +363,15 @@ class _DayCellState extends State<_DayCell> {
       bg = Colors.white;
     }
 
+    final border = _dragOver
+        ? Border.all(color: AppColors.accent, width: _kDragOverBorderWidth)
+        : Border(
+            left: widget.isSelected
+                ? const BorderSide(color: AppColors.accent, width: 2.5)
+                : const BorderSide(color: AppColors.divider, width: 0.5),
+            bottom: const BorderSide(color: AppColors.divider, width: 0.5),
+          );
+
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hovered = true),
@@ -278,43 +380,54 @@ class _DayCellState extends State<_DayCell> {
         onTap: widget.onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 80),
-          decoration: BoxDecoration(
-            color: bg,
-            border: Border(
-              left: widget.isSelected
-                  ? const BorderSide(color: AppColors.accent, width: 2.5)
-                  : const BorderSide(color: AppColors.divider, width: 0.5),
-              bottom:
-                  const BorderSide(color: AppColors.divider, width: 0.5),
-            ),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(6, 4, 4, 4),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Date number with today-circle
-                _DateNumber(
-                  day: widget.date!.day,
-                  isToday: widget.isToday,
-                  isSelected: widget.isSelected,
-                ),
-                const SizedBox(height: 2),
-                // Up to 3 task pills
-                for (final t in widget.tasks.take(3)) _TaskPill(task: t),
-                if (widget.tasks.length > 3)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 1),
-                    child: Text(
-                      '+${widget.tasks.length - 3}',
-                      style: const TextStyle(
-                        fontSize: 9,
-                        color: AppColors.textTertiary,
-                      ),
+          decoration: BoxDecoration(color: bg, border: border),
+          child: Stack(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(6, 4, 4, 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Date number with today-circle
+                    _DateNumber(
+                      day: widget.date!.day,
+                      isToday: widget.isToday,
+                      isSelected: widget.isSelected,
                     ),
+                    const SizedBox(height: 2),
+                    // Up to 3 task pills
+                    for (final t in widget.tasks.take(3)) _TaskPill(task: t),
+                    if (widget.tasks.length > 3)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 1),
+                        child: Text(
+                          '+${widget.tasks.length - 3}',
+                          style: const TextStyle(
+                            fontSize: 9,
+                            color: AppColors.textTertiary,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              // Settle-pulse overlay when a task lands here.
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: AnimatedBuilder(
+                    animation: _pulseCtrl,
+                    builder: (_, _) => _pulseCtrl.value == 0
+                        ? const SizedBox.shrink()
+                        : DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: AppColors.accent.withValues(
+                                  alpha: _pulseCtrl.value * _kPulsePeakOpacity),
+                            ),
+                          ),
                   ),
-              ],
-            ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -395,6 +508,36 @@ class _TaskPill extends StatelessWidget {
       ),
     );
 
+    // Makes the pill draggable onto another day cell to reschedule it.
+    Widget draggable(Widget child) => Draggable<String>(
+          data: task.id,
+          dragAnchorStrategy: pointerDragAnchorStrategy,
+          feedback: Material(
+            color: Colors.transparent,
+            child: Container(
+              width: _kDragFeedbackWidth,
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: BoxDecoration(
+                color: AppColors.cardSurface,
+                borderRadius: BorderRadius.circular(3),
+                border: Border.all(
+                    color: color.withValues(alpha: 0.4), width: 0.5),
+                boxShadow: const [
+                  BoxShadow(color: Color(0x33000000), blurRadius: 6),
+                ],
+              ),
+              child: Text(
+                task.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: textStyle.copyWith(decoration: null),
+              ),
+            ),
+          ),
+          childWhenDragging: Opacity(opacity: 0.3, child: pill),
+          child: child,
+        );
+
     return LayoutBuilder(builder: (context, constraints) {
       final tp = TextPainter(
         text: TextSpan(text: task.title, style: textStyle),
@@ -403,7 +546,7 @@ class _TaskPill extends StatelessWidget {
         textScaler: MediaQuery.textScalerOf(context),
       )..layout(maxWidth: constraints.maxWidth - 8);
 
-      if (!tp.didExceedMaxLines) return pill;
+      if (!tp.didExceedMaxLines) return draggable(pill);
 
       // Build tooltip meta line (priority + due date).
       final parts = <String>[];
@@ -412,7 +555,7 @@ class _TaskPill extends StatelessWidget {
       if (task.dueDate != null) parts.add('Due ${_dueFmt.format(task.dueDate!)}');
       final meta = parts.join(' · ');
 
-      return Tooltip(
+      return draggable(Tooltip(
         richMessage: TextSpan(
           children: [
             TextSpan(
@@ -443,7 +586,7 @@ class _TaskPill extends StatelessWidget {
         preferBelow: false,
         waitDuration: const Duration(milliseconds: 500),
         child: pill,
-      );
+      ));
     });
   }
 }
