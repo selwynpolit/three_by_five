@@ -6,14 +6,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' as intl;
-import 'package:path/path.dart' as p;
 
 import '../../core/theme/app_colors.dart';
-import '../../data/daos/settings_dao.dart';
 import '../../domain/enums/app_view.dart';
 import '../providers/backup_providers.dart';
 import '../providers/card_view_settings_provider.dart';
-import '../providers/database_provider.dart';
 import '../providers/export_providers.dart';
 import '../providers/zoom_providers.dart';
 
@@ -317,7 +314,7 @@ class _AutoBackupSection extends ConsumerWidget {
         ref.watch(autoBackupFrequencyProvider).valueOrNull ?? 'off';
     final configuredFolder =
         ref.watch(autoBackupFolderProvider).valueOrNull;
-    final dao = SettingsDao(ref.watch(appDatabaseProvider));
+    final settings = ref.read(autoBackupSettingsControllerProvider);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -343,7 +340,7 @@ class _AutoBackupSection extends ConsumerWidget {
                   const Spacer(),
                   _FrequencyPicker(
                     current: frequency,
-                    onChange: (v) => dao.set('backupAutoFrequency', v),
+                    onChange: settings.setFrequency,
                   ),
                 ],
               ),
@@ -393,7 +390,7 @@ class _AutoBackupSection extends ConsumerWidget {
                         dialogTitle: 'Choose Automatic Backup Folder',
                       );
                       if (chosen != null) {
-                        await dao.set('backupAutoFolder', chosen);
+                        await settings.setFolder(chosen);
                       }
                     }),
                   ],
