@@ -91,41 +91,46 @@ class ThreeByFiveApp extends ConsumerWidget {
         PlatformMenu(
           label: 'Edit',
           menus: [
+            // App-level Undo: reverses the last recorded domain action (task
+            // complete/delete, note delete, card hide/snooze/archive/delete).
+            // Single-level only; there is no redo yet (see CLAUDE.md — full
+            // multi-level undo/redo is a planned future feature).
             PlatformMenuItem(
               label: 'Undo',
               shortcut: const SingleActivator(
                   LogicalKeyboardKey.keyZ, meta: true),
               onSelected: () => executeUndo(ref),
             ),
-            PlatformMenuItem(
-              label: 'Redo',
-              shortcut: const SingleActivator(
-                  LogicalKeyboardKey.keyZ, meta: true, shift: true),
-              onSelected: () {},
-            ),
+            // Cut/Copy/Paste/Select All act on the currently focused text
+            // field. Keyboard shortcuts are handled by Flutter directly; these
+            // handlers make the menu-bar clicks work too.
             PlatformMenuItem(
               label: 'Cut',
               shortcut: const SingleActivator(
                   LogicalKeyboardKey.keyX, meta: true),
-              onSelected: () {},
+              onSelected: () => _invokeFocusedEditIntent(
+                  CopySelectionTextIntent.cut(SelectionChangedCause.toolbar)),
             ),
             PlatformMenuItem(
               label: 'Copy',
               shortcut: const SingleActivator(
                   LogicalKeyboardKey.keyC, meta: true),
-              onSelected: () {},
+              onSelected: () =>
+                  _invokeFocusedEditIntent(CopySelectionTextIntent.copy),
             ),
             PlatformMenuItem(
               label: 'Paste',
               shortcut: const SingleActivator(
                   LogicalKeyboardKey.keyV, meta: true),
-              onSelected: () {},
+              onSelected: () => _invokeFocusedEditIntent(
+                  const PasteTextIntent(SelectionChangedCause.toolbar)),
             ),
             PlatformMenuItem(
               label: 'Select All',
               shortcut: const SingleActivator(
                   LogicalKeyboardKey.keyA, meta: true),
-              onSelected: () {},
+              onSelected: () => _invokeFocusedEditIntent(
+                  const SelectAllTextIntent(SelectionChangedCause.toolbar)),
             ),
           ],
         ),
@@ -154,5 +159,15 @@ class ThreeByFiveApp extends ConsumerWidget {
         home: const AppShell(),
       ),
     );
+  }
+}
+
+/// Invokes a text-editing [intent] on the currently focused editable so the
+/// macOS Edit-menu items (Cut/Copy/Paste/Select All) act on the focused field
+/// when clicked from the menu bar. No-op when nothing editable is focused.
+void _invokeFocusedEditIntent(Intent intent) {
+  final context = FocusManager.instance.primaryFocus?.context;
+  if (context != null) {
+    Actions.maybeInvoke(context, intent);
   }
 }
