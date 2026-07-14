@@ -67,7 +67,27 @@ VIOLATION bullet and the backup_providers inconsistency bullet).
 
 ---
 
-## Task 2 — Fix no-op Edit menu items in lib/app.dart  🔴 HIGH
+## Task 2 — Fix no-op Edit menu items in lib/app.dart  ✅ DONE (2026-07-14)
+
+**Verification result (human hand-test on macOS):** the empty menu handlers
+did NOT swallow keyboard shortcuts — ⌘A/⌘C/⌘V/⌘X work normally in plain text
+fields on the current Flutter version. The original premise (shortcut
+swallowing) was disproven. What was actually broken: the menu-bar *clicks* for
+Cut/Copy/Paste/Select All did nothing, Redo did nothing (no feature), and app
+Undo works only for its 7 recorded domain actions.
+
+**What was done:**
+- Removed the dead Redo menu item (no redo exists in UndoManager).
+- Wired Cut/Copy/Paste/Select All `onSelected` to `_invokeFocusedEditIntent`,
+  which invokes the text-editing intents on `FocusManager.primaryFocus` so the
+  menu-bar clicks act on the focused field.
+- Kept Undo (works in its limited scope via `executeUndo`).
+- Docs updated: CLAUDE.md Keyboard-Shortcuts note + Known issues clarified;
+  "Full multi-level undo/redo" added to Phase 2 planned.
+- `flutter analyze` clean, `flutter test` 77 passing. Menu-bar click behavior
+  needs a human click-test (not automatable here).
+
+Original task spec preserved below for reference.
 
 **Problem:** `lib/app.dart` (~lines 94–129) declares PlatformMenuItems for
 Redo (⌘⇧Z), Cut (⌘X), Copy (⌘C), Paste (⌘V), Select All (⌘A) with

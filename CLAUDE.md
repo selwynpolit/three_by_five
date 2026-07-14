@@ -284,10 +284,19 @@ These are defined and must be maintained:
 | ⌘H | Hide app (macOS menu) |
 | ⌘Q | Quit app (macOS menu) |
 
-Note: the Edit menu (`lib/app.dart`) also declares ⌘⇧Z Redo, ⌘X, ⌘C, ⌘V, and
-⌘A menu items whose handlers are **empty no-ops** (`onSelected: () {}`). Redo
-has no UndoManager support. These may swallow native text-field shortcuts —
-see Known issues.
+Note on the Edit menu (`lib/app.dart`):
+- **Undo (⌘Z)** reverses the last recorded *domain* action only (task
+  complete/delete, note delete, card hide/snooze/archive/delete). It is a
+  single-level buffer — no history stack — surfaced via the undo toast. It does
+  NOT undo typing, task/card creation, renaming, moving, or reordering.
+- **Cut/Copy/Paste/Select All** act on the focused text field. Keyboard
+  shortcuts are handled by Flutter directly; the menu-bar clicks are wired via
+  `_invokeFocusedEditIntent` to the corresponding text-editing intents.
+- **Redo is not implemented** — the menu item was removed. Verified (2026-07-14)
+  that the empty menu handlers did NOT swallow keyboard shortcuts on the current
+  Flutter version; keyboard editing works regardless.
+- A full multi-level undo/redo covering more operations is a **planned future
+  feature** — see Phase 2.
 
 ---
 
@@ -363,7 +372,10 @@ Google Calendar integration, Dark and sepia themes fully styled, Notifications
 and reminders, Settings screen (a backup-focused settings panel already exists
 — see Views; the full screen will absorb it), Due date filtering UI, Custom URL scheme
 (3by5://add), Gmail API, macOS Mail Share Extension, Outlook add-in, Cloud sync
-(Supabase or Firebase), iOS and Android apps, Voice dictation into notes.
+(Supabase or Firebase), iOS and Android apps, Voice dictation into notes,
+Full multi-level undo/redo (today's undo is a single-action buffer covering 7
+destructive/state actions; there is no redo — this expands it to a proper
+history stack across more operations).
 
 **Phase 3 — Future:**
 Two-way Google Calendar sync, Apple Calendar, Web companion app (Next.js),
@@ -528,9 +540,10 @@ Known issues:
 - ⌘F not bound (⌘K handles search)
 - Tab/⇧Tab and Space shortcuts not implemented
 - Per-display zoom memory not implemented (needs native platform channel for stable display ID)
-- Edit menu items Redo (⌘⇧Z), Cut, Copy, Paste, Select All in lib/app.dart have
-  empty onSelected handlers; Redo is not supported by UndoManager. May swallow
-  native text-field shortcuts (HANDOFF.md #2)
+- No redo, and app Undo is single-action only (limited to 7 destructive/state
+  actions) — full multi-level undo/redo is a planned Phase 2 feature. The dead
+  Redo menu item was removed and the Edit menu's Cut/Copy/Paste/Select All were
+  wired to the focused field (HANDOFF.md #2 done)
 - Calendar View: no weekly mode, no drag-to-reschedule (HANDOFF.md #3)
 - Magic numbers: settings_panel.dart uses no AppSpacing constants;
   index_card_widget.dart repeats raw popup-menu dimensions (HANDOFF.md #4)
