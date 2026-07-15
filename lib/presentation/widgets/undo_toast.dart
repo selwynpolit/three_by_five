@@ -10,6 +10,11 @@ import '../providers/detail_providers.dart';
 import '../providers/task_providers.dart';
 import '../providers/ui_state_providers.dart';
 
+/// Bumped every time an undo is actually executed, so [UndoToast] can flash a
+/// brief "Undone" confirmation regardless of how the undo was triggered (the
+/// toast button, ⌘Z, or the Edit-menu item).
+final undoConfirmationProvider = StateProvider<int>((ref) => 0);
+
 /// Executes the current pending undo action and clears it.
 /// Safe to call from any context that has a [WidgetRef] — the toast button,
 /// the ⌘Z menu item, and keyboard handlers all share this logic.
@@ -38,6 +43,9 @@ Future<void> executeUndo(WidgetRef ref) async {
     case NoteDeleted(:final noteId):
       await ref.read(noteRepositoryProvider).restore(noteId);
   }
+
+  // Signal that an undo completed so the UI can confirm it on screen.
+  ref.read(undoConfirmationProvider.notifier).state++;
 }
 
 class UndoToast extends ConsumerStatefulWidget {
@@ -55,7 +63,12 @@ class _UndoToastState extends ConsumerState<UndoToast>
   Timer? _dismissTimer;
   UndoAction? _action;
 
+  /// Non-null while a post-undo confirmation is showing (mutually exclusive
+  /// with [_action]).
+  String? _confirmation;
+
   static const _kDuration = Duration(seconds: 4);
+  static const _kConfirmationDuration = Duration(milliseconds: 1600);
 
   @override
   void initState() {
@@ -80,16 +93,35 @@ class _UndoToastState extends ConsumerState<UndoToast>
 
   void _show(UndoAction action) {
     _dismissTimer?.cancel();
-    setState(() => _action = action);
+    setState(() {
+      _action = action;
+      _confirmation = null;
+    });
     _ctrl.forward(from: 0);
     _dismissTimer = Timer(_kDuration, _dismiss);
+  }
+
+  /// Briefly shows an "Undone" confirmation after any undo executes.
+  void _showConfirmation() {
+    _dismissTimer?.cancel();
+    setState(() {
+      _action = null;
+      _confirmation = 'Undone';
+    });
+    _ctrl.forward(from: 0);
+    _dismissTimer = Timer(_kConfirmationDuration, _dismiss);
   }
 
   void _dismiss() {
     _ctrl.reverse().then((_) {
       // Don't clear lastUndoActionProvider — ⌘Z must still work after the
       // toast slides out. The action is only consumed when the user undoes.
-      if (mounted) setState(() => _action = null);
+      if (mounted) {
+        setState(() {
+          _action = null;
+          _confirmation = null;
+        });
+      }
     });
   }
 
@@ -118,8 +150,11 @@ class _UndoToastState extends ConsumerState<UndoToast>
     ref.listen<UndoAction?>(lastUndoActionProvider, (_, next) {
       if (next != null) _show(next);
     });
+    ref.listen<int>(undoConfirmationProvider, (_, _) => _showConfirmation());
 
-    if (_action == null) return const SizedBox.shrink();
+    if (_action == null && _confirmation == null) {
+      return const SizedBox.shrink();
+    }
 
     return SlideTransition(
       position: _slide,
@@ -132,44 +167,66 @@ class _UndoToastState extends ConsumerState<UndoToast>
           child: Padding(
             padding:
                 const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  _label(_action!),
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Colors.white,
-                      ),
-                ),
-                const SizedBox(width: 18),
-                GestureDetector(
-                  onTap: _undo,
-                  child: MouseRegion(
-                    cursor: SystemMouseCursors.click,
-                    child: Text(
-                      'Undo',
-                      style:
-                          Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: AppColors.accentMuted,
-                                fontWeight: FontWeight.w700,
-                              ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 14),
-                GestureDetector(
-                  onTap: _dismiss,
-                  child: MouseRegion(
-                    cursor: SystemMouseCursors.click,
-                    child: const Icon(Icons.close,
-                        size: 15, color: Colors.white54),
-                  ),
-                ),
-              ],
-            ),
+            child: _confirmation != null
+                ? _buildConfirmationRow()
+                : _buildActionRow(),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildActionRow() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          _label(_action!),
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Colors.white,
+              ),
+        ),
+        const SizedBox(width: 18),
+        GestureDetector(
+          onTap: _undo,
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: Text(
+              'Undo',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.accentMuted,
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 14),
+        GestureDetector(
+          onTap: _dismiss,
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: const Icon(Icons.close, size: 15, color: Colors.white54),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildConfirmationRow() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.check_circle_outline,
+            size: 16, color: Colors.white),
+        const SizedBox(width: 10),
+        Text(
+          _confirmation!,
+          style: Theme.of(context)
+              .textTheme
+              .bodyMedium
+              ?.copyWith(color: Colors.white),
+        ),
+      ],
     );
   }
 }

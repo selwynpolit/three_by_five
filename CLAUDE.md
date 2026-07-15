@@ -291,7 +291,9 @@ Note on the Edit menu (`lib/app.dart`):
 - **Undo (⌘Z)** reverses the last recorded *domain* action only (task
   complete/delete/reschedule, note delete, card hide/snooze/archive/delete). It is a
   single-level buffer — no history stack — surfaced via the undo toast. It does
-  NOT undo typing, task/card creation, renaming, moving, or reordering.
+  NOT undo typing, task/card creation, renaming, moving, or reordering. After any
+  undo runs (via ⌘Z, the Edit menu, or the toast button) an "Undone" confirmation
+  flashes briefly, driven by `undoConfirmationProvider` in `undo_toast.dart`.
 - **Cut/Copy/Paste/Select All** act on the focused text field. Keyboard
   shortcuts are handled by Flutter directly; the menu-bar clicks are wired via
   `_invokeFocusedEditIntent` to the corresponding text-editing intents.
