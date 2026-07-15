@@ -25,6 +25,14 @@ abstract final class AppSpacing {
   static const double checkboxSize = 18;
   static const double columnHeaderHeight = 26;
 
+  // ── Borders ──────────────────────────────────────────────────────────────────
+  /// Standard hairline border / divider thickness.
+  static const double hairline = 0.5;
+
+  // ── Context menu (right-click popup) ─────────────────────────────────────────
+  static const double contextMenuItemHeight = 32;
+  static const double contextMenuItemHPad = 14;
+
   // ── Zoom-scaling anchors (multiply by zoom scale factor) ─────────────────────
   /// Fixed height of each task row cell in the card column.
   static const double taskRowHeight = 22.0;
