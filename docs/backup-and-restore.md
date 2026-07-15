@@ -4,6 +4,12 @@ A backup is a safety net and a way to move your data between machines. It's a si
 
 ---
 
+## Opening Settings
+
+The backup controls below live in the **Settings** panel. Open it with the gear-icon **Settings** row at the bottom of the sidebar. The panel also holds a few other sections — **Card View** options, per-view **Zoom** levels (see views.md), and **Export** (see export.md) — but backups are what most people come here for. Press Escape or click outside the panel to close it.
+
+---
+
 ## Creating a backup
 
 You can create a backup manually in two ways:

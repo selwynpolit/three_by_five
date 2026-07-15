@@ -61,6 +61,16 @@ class _IndexCardWidgetState extends ConsumerState<IndexCardWidget> {
 
   // ── Context menu (header-only right-click) ─────────────────────────────────
 
+  /// A right-click menu row with the shared height/padding for this menu.
+  static PopupMenuItem<String> _menuItem(String value, String label) =>
+      PopupMenuItem<String>(
+        value: value,
+        height: AppSpacing.contextMenuItemHeight,
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.contextMenuItemHPad),
+        child: Text(label),
+      );
+
   Future<void> _showCardMenu(
       BuildContext context, Offset globalPos) async {
     final card = widget.card;
@@ -73,28 +83,28 @@ class _IndexCardWidgetState extends ConsumerState<IndexCardWidget> {
           globalPos.dx, globalPos.dy, globalPos.dx + 1, globalPos.dy + 1),
       items: [
         if (archived) ...[
-          const PopupMenuItem(value: 'restore', height: 32, padding: EdgeInsets.symmetric(horizontal: 14), child: Text('Restore')),
+          _menuItem('restore', 'Restore'),
           const PopupMenuDivider(height: 1),
         ] else ...[
           if (hidden)
-            const PopupMenuItem(value: 'unhide', height: 32, padding: EdgeInsets.symmetric(horizontal: 14), child: Text('Unhide'))
+            _menuItem('unhide', 'Unhide')
           else ...[
-            const PopupMenuItem(value: 'hide', height: 32, padding: EdgeInsets.symmetric(horizontal: 14), child: Text('Hide')),
-            const PopupMenuItem(value: 'snooze', height: 32, padding: EdgeInsets.symmetric(horizontal: 14), child: Text('Snooze until…')),
+            _menuItem('hide', 'Hide'),
+            _menuItem('snooze', 'Snooze until…'),
           ],
           const PopupMenuDivider(height: 1),
-          const PopupMenuItem(value: 'kanban', height: 32, padding: EdgeInsets.symmetric(horizontal: 14), child: Text('Kanban view…')),
+          _menuItem('kanban', 'Kanban view…'),
           const PopupMenuDivider(height: 1),
-          const PopupMenuItem(value: 'move_stack', height: 32, padding: EdgeInsets.symmetric(horizontal: 14), child: Text('Move to stack…')),
+          _menuItem('move_stack', 'Move to stack…'),
           const PopupMenuDivider(height: 1),
-          const PopupMenuItem(value: 'carry_forward', height: 32, padding: EdgeInsets.symmetric(horizontal: 14), child: Text('Carry Forward')),
+          _menuItem('carry_forward', 'Carry Forward'),
           const PopupMenuDivider(height: 1),
-          const PopupMenuItem(value: 'del_completed', height: 32, padding: EdgeInsets.symmetric(horizontal: 14), child: Text('Delete completed tasks')),
+          _menuItem('del_completed', 'Delete completed tasks'),
           const PopupMenuDivider(height: 1),
-          const PopupMenuItem(value: 'archive', height: 32, padding: EdgeInsets.symmetric(horizontal: 14), child: Text('Archive')),
+          _menuItem('archive', 'Archive'),
           const PopupMenuDivider(height: 1),
         ],
-        const PopupMenuItem(value: 'delete', height: 32, padding: EdgeInsets.symmetric(horizontal: 14), child: Text('Delete')),
+        _menuItem('delete', 'Delete'),
       ],
     );
 

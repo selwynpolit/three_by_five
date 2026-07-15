@@ -550,7 +550,7 @@ Known issues:
   Redo menu item was removed and the Edit menu's Cut/Copy/Paste/Select All were
   wired to the focused field (HANDOFF.md #2 done)
 - Calendar View: no weekly mode yet (drag-to-reschedule done — HANDOFF.md #3)
-- Magic numbers: settings_panel.dart uses no AppSpacing constants;
-  index_card_widget.dart repeats raw popup-menu dimensions (HANDOFF.md #4)
-- lib/presentation/views/search/ is an empty scaffold directory (search lives
-  in presentation/widgets/search_overlay.dart)
+- Note: settings_panel.dart still uses raw font sizes / one-off widget
+  dimensions inline (matching the rest of the codebase — AppSpacing does not
+  cover font sizes); its layout scaffold (padding/radius/border/gaps) now uses
+  AppSpacing constants (HANDOFF.md #4 done)

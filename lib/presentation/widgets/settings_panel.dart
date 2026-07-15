@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' as intl;
 
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_spacing.dart';
 import '../../domain/enums/app_view.dart';
 import '../providers/backup_providers.dart';
 import '../providers/card_view_settings_provider.dart';
@@ -53,7 +54,7 @@ class _SettingsCard extends ConsumerWidget {
     return Material(
       color: Colors.transparent,
       child: Container(
-        width: 520,
+        width: AppSpacing.cardWidth,
         constraints: const BoxConstraints(maxHeight: 700),
         decoration: BoxDecoration(
           color: AppColors.canvas,
@@ -128,15 +129,15 @@ class _SettingsCard extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const _CardViewSection(),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: AppSpacing.lg),
                       const _BackupRestoreSection(),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: AppSpacing.lg),
                       const _AutoBackupSection(),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: AppSpacing.lg),
                       const _SafetyBackupsSection(),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: AppSpacing.lg),
                       const _ExportSection(),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: AppSpacing.lg),
                       const _ZoomSection(),
                     ],
                   ),
@@ -168,8 +169,8 @@ class _CardViewSection extends ConsumerWidget {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
             color: AppColors.cardSurface,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.cardBorder, width: 0.5),
+            borderRadius: BorderRadius.circular(AppSpacing.cardRadius),
+            border: Border.all(color: AppColors.cardBorder, width: AppSpacing.hairline),
           ),
           child: Row(
             children: [
@@ -226,11 +227,11 @@ class _BackupRestoreSection extends ConsumerWidget {
         _SectionLabel('BACKUP & RESTORE'),
         const SizedBox(height: 12),
         Container(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(AppSpacing.cardPadding),
           decoration: BoxDecoration(
             color: AppColors.cardSurface,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.cardBorder, width: 0.5),
+            borderRadius: BorderRadius.circular(AppSpacing.cardRadius),
+            border: Border.all(color: AppColors.cardBorder, width: AppSpacing.hairline),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -322,11 +323,11 @@ class _AutoBackupSection extends ConsumerWidget {
         _SectionLabel('AUTOMATIC BACKUPS'),
         const SizedBox(height: 12),
         Container(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(AppSpacing.cardPadding),
           decoration: BoxDecoration(
             color: AppColors.cardSurface,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.cardBorder, width: 0.5),
+            borderRadius: BorderRadius.circular(AppSpacing.cardRadius),
+            border: Border.all(color: AppColors.cardBorder, width: AppSpacing.hairline),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -625,11 +626,11 @@ class _ExportSection extends ConsumerWidget {
         _SectionLabel('EXPORT'),
         const SizedBox(height: 12),
         Container(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(AppSpacing.cardPadding),
           decoration: BoxDecoration(
             color: AppColors.cardSurface,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.cardBorder, width: 0.5),
+            borderRadius: BorderRadius.circular(AppSpacing.cardRadius),
+            border: Border.all(color: AppColors.cardBorder, width: AppSpacing.hairline),
           ),
           child: Row(
             children: [
@@ -702,11 +703,11 @@ class _ZoomSection extends ConsumerWidget {
         _SectionLabel('ZOOM'),
         const SizedBox(height: 12),
         Container(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(AppSpacing.cardPadding),
           decoration: BoxDecoration(
             color: AppColors.cardSurface,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.cardBorder, width: 0.5),
+            borderRadius: BorderRadius.circular(AppSpacing.cardRadius),
+            border: Border.all(color: AppColors.cardBorder, width: AppSpacing.hairline),
           ),
           child: Column(
             children: _viewLabels.entries.map((entry) {
@@ -791,7 +792,7 @@ class _ZoomStepBtnState extends State<_ZoomStepBtn> {
           decoration: BoxDecoration(
             color: _hovered ? AppColors.divider : Colors.transparent,
             borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: AppColors.cardBorder, width: 0.5),
+            border: Border.all(color: AppColors.cardBorder, width: AppSpacing.hairline),
           ),
           child: Icon(widget.icon, size: 14, color: AppColors.textSecondary),
         ),
@@ -930,7 +931,7 @@ class _SmallBtnState extends State<_SmallBtn> {
           decoration: BoxDecoration(
             color: _hovered ? AppColors.divider : Colors.transparent,
             borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: AppColors.cardBorder, width: 0.5),
+            border: Border.all(color: AppColors.cardBorder, width: AppSpacing.hairline),
           ),
           child: Text(widget.label,
               style: Theme.of(context).textTheme.labelSmall?.copyWith(

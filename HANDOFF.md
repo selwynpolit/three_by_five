@@ -171,7 +171,17 @@ Views section + Known issues when done.
 
 ---
 
-## Task 4 — Magic-number cleanup  ⚠️ MEDIUM
+## Task 4 — Magic-number cleanup  ✅ DONE (2026-07-14)
+
+Added `AppSpacing.hairline`, `AppSpacing.contextMenuItemHeight`, and
+`AppSpacing.contextMenuItemHPad`. `index_card_widget.dart` now builds its
+right-click rows via a shared `_menuItem(value, label)` helper (dimensions in
+one place). `settings_panel.dart`'s layout scaffold (section padding/radius/
+border/gaps + card width) now uses AppSpacing constants. Font sizes and
+one-off widget dimensions were intentionally left inline — AppSpacing does not
+model font sizes, and the rest of the codebase keeps those inline too. Visual
+output unchanged; `flutter analyze` clean, `flutter test` 82 passing. Original
+spec preserved below.
 
 **Problem:** two files violate the named-constants rule:
 - `lib/presentation/widgets/settings_panel.dart` — zero `AppSpacing.*` usages;
@@ -199,7 +209,20 @@ output unchanged. Update CLAUDE.md Known issues bullet when done.
 
 ---
 
-## Task 5 — Small cleanups  📝 LOW (batch these together)
+## Task 5 — Small cleanups  ✅ DONE (2026-07-14)
+
+1. Removed the empty `lib/presentation/views/search/` scaffold dir (nothing
+   imported it; git tracked no files there, so no diff — it was untracked
+   empty dirs on disk).
+2. Docs: the card layout modes were already fully documented in `docs/views.md`
+   (Stack / Sorted Grid / Free Canvas / Task List), and the settings panel's
+   backup features in `docs/backup-and-restore.md`. Added an "Opening Settings"
+   section to `docs/backup-and-restore.md` (the gear-icon row in the sidebar)
+   since no doc explained how to reach Settings — pointing to views.md/export.md
+   for the non-backup sections rather than duplicating them.
+3. CLAUDE.md Known issues updated (empty-scaffold bullet removed).
+
+Original spec:
 
 1. **Delete empty scaffold dir** `lib/presentation/views/search/` (contains
    only an empty `widgets/` dir; real search UI is
