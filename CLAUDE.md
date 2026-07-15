@@ -225,9 +225,26 @@ task-list grid with sortable columns — see `canvas_providers.dart`). Canvas
 mode is excluded from the zoom system (it has its own InteractiveViewer).
 
 **Kanban View** — cards as swimlane columns, tasks as cards within lanes.
+Add/rename/reorder columns; drag tasks between stages (dropping into a Done
+column completes the task). Columns are the single global `BoardColumns` set,
+shared across all cards.
 
-**Board View** — ambitious cards expand into full Kanban boards with
-customisable columns. Directory structure exists; implementation pending.
+**Per-card Kanban dialog** (implemented — not to be confused with Board View
+below) — right-click a card → "Kanban view…", or click the kanban badge on a
+card, opens `showCardKanbanDialog` (`kanban_view.dart`). A **modal dialog**
+showing just that one card's tasks across the shared `BoardColumns` stages,
+with drag-and-drop and a hide-completed toggle. It is transient — it does NOT
+set the card's status and does NOT give the card its own columns.
+
+**Board View** — the *unbuilt* Phase 1 feature: turning a card into a
+**persistent** expanded board (`CardStatus.expanded`) with its own
+**per-card customisable** columns — distinct from the per-card Kanban dialog
+above, which is transient and uses the shared global columns. Scaffolding only:
+the `board_view/` directory is empty, `CardRepository.makeBoard()`/`unboard()`
+and the `expanded` status exist but nothing in the UI calls them (a card only
+shows a "Board" tooltip icon if its status is `expanded`), and per-card columns
+are **not possible yet** — `BoardColumns` has no `cardId`, so delivering custom
+columns needs a schema migration. Implementation pending.
 
 **Task Detail View** — title, priority, due date, tags, rich text description,
 timestamped editable notes feed, attachments.
