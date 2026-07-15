@@ -233,9 +233,12 @@ customisable columns. Directory structure exists; implementation pending.
 timestamped editable notes feed, attachments.
 
 **Calendar View** — monthly grid. Tasks appear on due dates as pills (max 3
-shown per day) with truncation-detected tooltips. Weekly mode and
-drag-to-reschedule are **not yet implemented** (Coming Soon). Google Calendar
-overlay in Phase 2.
+shown per day) with truncation-detected tooltips. **Drag-to-reschedule**: drag
+a pill onto another day to change its due date (time-of-day preserved,
+destination cell highlights + pulses on drop, undoable via `TaskRescheduled`).
+Reschedule logic lives in `_CalendarViewState._reschedule` and writes through
+`TaskRepository.updateDueDate`. Weekly mode is still **Coming Soon**. Google
+Calendar overlay in Phase 2.
 
 **Today Dashboard** — tasks due today grouped by card/project. Calendar
 events in Phase 2.
@@ -286,9 +289,11 @@ These are defined and must be maintained:
 
 Note on the Edit menu (`lib/app.dart`):
 - **Undo (⌘Z)** reverses the last recorded *domain* action only (task
-  complete/delete, note delete, card hide/snooze/archive/delete). It is a
+  complete/delete/reschedule, note delete, card hide/snooze/archive/delete). It is a
   single-level buffer — no history stack — surfaced via the undo toast. It does
-  NOT undo typing, task/card creation, renaming, moving, or reordering.
+  NOT undo typing, task/card creation, renaming, moving, or reordering. After any
+  undo runs (via ⌘Z, the Edit menu, or the toast button) an "Undone" confirmation
+  flashes briefly, driven by `undoConfirmationProvider` in `undo_toast.dart`.
 - **Cut/Copy/Paste/Select All** act on the focused text field. Keyboard
   shortcuts are handled by Flutter directly; the menu-bar clicks are wired via
   `_invokeFocusedEditIntent` to the corresponding text-editing intents.
@@ -544,7 +549,7 @@ Known issues:
   actions) — full multi-level undo/redo is a planned Phase 2 feature. The dead
   Redo menu item was removed and the Edit menu's Cut/Copy/Paste/Select All were
   wired to the focused field (HANDOFF.md #2 done)
-- Calendar View: no weekly mode, no drag-to-reschedule (HANDOFF.md #3)
+- Calendar View: no weekly mode yet (drag-to-reschedule done — HANDOFF.md #3)
 - Magic numbers: settings_panel.dart uses no AppSpacing constants;
   index_card_widget.dart repeats raw popup-menu dimensions (HANDOFF.md #4)
 - lib/presentation/views/search/ is an empty scaffold directory (search lives

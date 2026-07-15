@@ -107,6 +107,32 @@ void main() {
     });
   });
 
+  group('TaskRepository — updateDueDate', () {
+    test('sets a due date that getById reflects', () async {
+      final id = await fixture.tasks.create(cardId: cardId, title: 'Due soon');
+      final due = DateTime(2024, 6, 15, 9, 30);
+      await fixture.tasks.updateDueDate(id, due);
+      final task = await fixture.tasks.getById(id);
+      expect(task?.dueDate, due);
+    });
+
+    test('reschedules an existing due date to a new day', () async {
+      final id = await fixture.tasks.create(cardId: cardId, title: 'Move me');
+      await fixture.tasks.updateDueDate(id, DateTime(2024, 6, 10, 14, 0));
+      await fixture.tasks.updateDueDate(id, DateTime(2024, 6, 20, 14, 0));
+      final task = await fixture.tasks.getById(id);
+      expect(task?.dueDate, DateTime(2024, 6, 20, 14, 0));
+    });
+
+    test('null clears the due date', () async {
+      final id = await fixture.tasks.create(cardId: cardId, title: 'Clear me');
+      await fixture.tasks.updateDueDate(id, DateTime(2024, 6, 15));
+      await fixture.tasks.updateDueDate(id, null);
+      final task = await fixture.tasks.getById(id);
+      expect(task?.dueDate, isNull);
+    });
+  });
+
   group('TaskRepository — duplicate', () {
     test('duplicate creates a copy with the same title and column', () async {
       final original = await fixture.tasks.create(

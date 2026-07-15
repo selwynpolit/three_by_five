@@ -48,7 +48,11 @@ A month grid showing incomplete tasks that have a due date. Days with tasks are 
 
 Task chips in the month grid show as much of the title as fits the cell. When a title is too long to fit, hovering over the chip shows a tooltip with the full title and, if set, the priority and due date below in a smaller muted line.
 
+**Drag to reschedule** — grab a task chip and drop it onto another day to change its due date. The destination day highlights as you drag over it and gives a brief pulse when the task lands. The time of day is preserved — only the date moves. Changed your mind? Press ⌘Z (or the Undo button on the toast) to send it back.
+
 Navigate between months with the ← and → buttons. The "Today" button snaps you back to the current month. The priority colour legend at the bottom shows you what red, blue, and gray dots mean (high, normal, and low priority).
+
+A weekly view is coming soon.
 
 ---
 

@@ -113,7 +113,27 @@ Known issues bullet when done.
 
 ---
 
-## Task 3 — Calendar View: drag-to-reschedule  ⚠️ MEDIUM (significant feature — plan approval required)
+## Task 3 — Calendar View: drag-to-reschedule  ✅ DONE (2026-07-14)
+
+**What was built** (plan approved; scope: grid pills only, with a settle-pulse):
+- `TaskRescheduled` undo action added to the sealed hierarchy; wired into
+  `executeUndo` + the toast label (`undo_toast.dart`).
+- `calendar_view.dart`: `_TaskPill` is now a `Draggable<String>` (payload =
+  task id) with an elevated feedback chip; `_DayCell` is a `DragTarget<String>`
+  with a drag-over accent highlight and a settle-pulse (AnimationController) on
+  drop. `_CalendarViewState._reschedule` preserves time-of-day, no-ops on
+  same-day drops, writes via `TaskRepository.updateDueDate`, and records undo.
+  New named constants for feedback width / border / pulse.
+- Reactivity: the existing `allVisibleTasksProvider` Drift-watch StreamProvider
+  re-emits, so the grid updates itself — no manual invalidation.
+- Tests: `task_repository_test.dart` (updateDueDate set/reschedule/clear) and
+  `undo_manager_test.dart` (TaskRescheduled subtype + exhaustive switch). 82
+  tests passing, analyze clean.
+- Docs: `docs/views.md` calendar section, CLAUDE.md Views + Known issues.
+- **Weekly mode intentionally NOT built** — still Coming Soon.
+- Drag *feel* verified by hand on macOS (drag gestures aren't automatable here).
+
+Original task spec preserved below for reference.
 
 **Problem:** CLAUDE.md's Views section promised "drag to reschedule" and a
 weekly mode; neither exists. `lib/presentation/views/calendar_view/calendar_view.dart`
